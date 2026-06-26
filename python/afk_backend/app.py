@@ -16,6 +16,8 @@ from .rpc import emit_event, RpcError
 from .settings import SettingsStore
 from .audio.recorder import Recorder, process as process_audio
 from .transcription.transcriber import Transcriber
+from .clipboard.clipboard import Clipboard
+from .hotkeys import HotkeyManager
 
 
 class AFKApp:
@@ -28,6 +30,17 @@ class AFKApp:
         self.recorder = Recorder()
         self.transcriber = Transcriber()
 
+        # Phase 3 services.
+        self.clipboard = Clipboard()
+        self.hotkeys = HotkeyManager(
+            {
+                "ptt_start": self._hk_ptt_start,
+                "ptt_stop": self._hk_ptt_stop,
+                "toggle": self._hk_toggle,
+                "clarify": self._hk_clarify,
+            }
+        )
+
         # Services added in later phases.
         self.clarifier = None        # Phase 4
         self.statistics = None       # Phase 5
@@ -35,6 +48,7 @@ class AFKApp:
         self._methods: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_core()
         self._register_audio()
+        self._register_clipboard_hotkeys()
 
     # ---- lifecycle ----
     def on_started(self) -> None:
@@ -43,10 +57,24 @@ class AFKApp:
         # Warm up the ASR model in the background so the first dictation is fast.
         # (Downloads weights on first ever run; subsequent runs are instant.)
         self.transcriber.preload_async()
+        # Arm global hotkeys from saved settings.
+        try:
+            self.hotkeys.set_bindings(self.settings.get("hotkeys", {}))
+            self.hotkeys.start()
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"Failed to start hotkeys: {exc}")
 
     def shutdown(self) -> None:
         logutil.info("Shutting down services")
-        # Later phases: release models, stop audio streams, flush stats.
+        try:
+            self.hotkeys.stop()
+        except Exception:
+            pass
+        try:
+            if self.recorder.is_recording:
+                self.recorder.stop()
+        except Exception:
+            pass
 
     # ---- dispatch ----
     def dispatch(self, method: str, params: Dict[str, Any]) -> Any:
@@ -94,6 +122,11 @@ class AFKApp:
             logutil.set_level("warn")
         else:
             logutil.set_level("debug")
+        # Live-reload hotkey bindings if they changed.
+        try:
+            self.hotkeys.set_bindings(updated.get("hotkeys", {}))
+        except Exception as exc:  # noqa: BLE001
+            logutil.warn(f"hotkey reload failed: {exc}")
         emit_event("settings_updated", updated)
         return updated
 
@@ -160,3 +193,88 @@ class AFKApp:
         if getattr(audio, "ndim", 1) > 1:
             audio = audio.mean(axis=1).astype(np.float32)
         return self.transcriber.transcribe(audio, sample_rate=int(sr))
+
+    # ---- clipboard + hotkeys methods (Phase 3) ----
+    def _register_clipboard_hotkeys(self) -> None:
+        self.register("get_clipboard", lambda p: {"text": self.clipboard.get_text()})
+        self.register("set_clipboard", self._set_clipboard)
+        self.register("paste_text", self._paste_text_method)
+        self.register("set_hotkeys", self._set_hotkeys)
+        self.register("hotkeys_status", self._hotkeys_status)
+
+    def _set_clipboard(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        self.clipboard.set_text(params.get("text", ""))
+        return {"ok": True}
+
+    def _paste_text_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        text = params.get("text", "")
+        self._paste(text)
+        return {"ok": True, "chars": len(text)}
+
+    def _set_hotkeys(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        hk = params.get("hotkeys") or params
+        updated = self.settings.update({"hotkeys": hk})
+        self.hotkeys.set_bindings(updated.get("hotkeys", {}))
+        emit_event("settings_updated", updated)
+        return updated["hotkeys"]
+
+    def _hotkeys_status(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "available": self.hotkeys.available(),
+            "hotkeys": self.settings.get("hotkeys", {}),
+        }
+
+    # ---- shared dictation flow ----
+    def _paste(self, text: str) -> None:
+        """Place text on the clipboard and paste it into the focused app."""
+        if not text:
+            return
+        try:
+            self.hotkeys.set_injecting(True)
+            self.clipboard.paste_text(text)
+            emit_event("pasted", {"chars": len(text)})
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"paste failed: {exc}")
+        finally:
+            self.hotkeys.set_injecting(False)
+
+    def _start_rec_safe(self) -> None:
+        try:
+            if not self.recorder.is_recording:
+                self.start_recording({})
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"start recording failed: {exc}")
+
+    def _stop_transcribe_paste(self) -> None:
+        try:
+            result = self.stop_recording({})
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"stop/transcribe failed: {exc}")
+            return
+        text = (result or {}).get("text", "")
+        if text and self.settings.get("auto_paste", True):
+            self._paste(text)
+
+    # ---- hotkey callbacks (run on the listener thread; offload heavy work) ----
+    def _hk_ptt_start(self) -> None:
+        threading.Thread(target=self._start_rec_safe, daemon=True).start()
+
+    def _hk_ptt_stop(self) -> None:
+        threading.Thread(target=self._stop_transcribe_paste, daemon=True).start()
+
+    def _hk_toggle(self) -> None:
+        if self.recorder.is_recording:
+            threading.Thread(target=self._stop_transcribe_paste, daemon=True).start()
+        else:
+            threading.Thread(target=self._start_rec_safe, daemon=True).start()
+
+    def _hk_clarify(self) -> None:
+        def _run():
+            if self.clarifier is None:
+                logutil.info("Clarify hotkey pressed (Clarify lands in Phase 4)")
+                emit_event("clarify_unavailable", {"reason": "Clarify lands in Phase 4"})
+                return
+            # Phase 4 implements the full selection->clarify->replace flow.
+            self._clarify_flow()
+
+        threading.Thread(target=_run, daemon=True).start()

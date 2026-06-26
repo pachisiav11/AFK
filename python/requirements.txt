@@ -15,8 +15,9 @@ onnx-asr[cpu,hub]>=0.6.0
 # on demand; uncomment if you want it provisioned by setup-python.js:
 #   nemo_toolkit[asr]>=2.7
 #
-# Phase 3 — clipboard / paste:
-#   (added in Phase 3)
+# Phase 3 — global hotkeys (press + release for push-to-talk) + clipboard/paste:
+pynput>=1.7.6
+pyperclip>=1.8.2
 #
 # Phase 4 — Clarify (Gemma via GGUF/llama.cpp on CPU):
 #   (added in Phase 4)
