@@ -56,6 +56,66 @@ async function refreshBackendInfo() {
   } catch (e) { /* backend may still be booting */ }
 }
 
+// ---------- Microphones + ASR (Phase 2) ----------
+async function refreshMicrophones() {
+  try {
+    const { devices } = await window.afk.call('list_microphones', {});
+    const sel = $('#micSelect');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">System default</option>';
+    (devices || []).forEach((d) => {
+      const opt = document.createElement('option');
+      opt.value = d.name;
+      opt.textContent = d.default ? `${d.name} (default)` : d.name;
+      sel.appendChild(opt);
+    });
+    const saved = (await window.afk.call('get_settings', {})).microphone;
+    sel.value = saved || current || '';
+  } catch (e) { /* backend booting */ }
+}
+
+async function refreshAsrStatus() {
+  try {
+    const { status } = await window.afk.call('asr_status', {});
+    const map = { loaded: 'Model: ready', loading: 'Model: loading…', 'not loaded': 'Model: idle' };
+    $('#asrStatus').textContent = map[status] || `Model: ${status}`;
+  } catch (e) { /* ignore */ }
+}
+
+let isRecording = false;
+async function toggleRecord() {
+  const btn = $('#recordBtn');
+  try {
+    if (!isRecording) {
+      const device = $('#micSelect').value || null;
+      await window.afk.call('start_recording', { device });
+      isRecording = true;
+      btn.textContent = 'Stop & transcribe';
+      btn.classList.add('recording');
+    } else {
+      btn.textContent = 'Transcribing…';
+      btn.disabled = true;
+      const res = await window.afk.call('stop_recording', {});
+      isRecording = false;
+      btn.disabled = false;
+      btn.textContent = 'Start recording';
+      btn.classList.remove('recording');
+      if (res && res.text) showTranscription(res.text);
+    }
+  } catch (e) {
+    isRecording = false;
+    btn.disabled = false;
+    btn.textContent = 'Start recording';
+    btn.classList.remove('recording');
+    showTranscription('⚠ ' + (e.message || 'Recording failed'));
+  }
+}
+
+async function onMicChange() {
+  const value = $('#micSelect').value || null;
+  try { await window.afk.call('update_settings', { patch: { microphone: value } }); } catch (e) {}
+}
+
 // ---------- Hotkeys display (filled in later phases) ----------
 async function refreshHotkeys() {
   try {
@@ -64,7 +124,6 @@ async function refreshHotkeys() {
     $('#pttHotkey').textContent = hk.push_to_talk || 'Ctrl+Space (hold)';
     $('#toggleHotkey').textContent = hk.toggle || 'Ctrl+Shift+Space';
     $('#clarifyHotkey').textContent = hk.clarify || 'Ctrl+Shift+C';
-    if (cfg && cfg.microphone) $('#activeMic').textContent = cfg.microphone;
   } catch (e) {
     // defaults until backend is ready
     $('#pttHotkey').textContent = 'Ctrl+Space (hold)';
@@ -84,6 +143,8 @@ function initEvents() {
     if (ready) {
       refreshBackendInfo();
       refreshHotkeys();
+      refreshMicrophones();
+      refreshAsrStatus();
     }
   });
 
@@ -133,9 +194,16 @@ function showTranscription(text) {
 window.addEventListener('DOMContentLoaded', async () => {
   initNav();
   initEvents();
+  $('#recordBtn').addEventListener('click', toggleRecord);
+  $('#micSelect').addEventListener('change', onMicChange);
   await initAbout();
   await refreshBackendInfo();
   await refreshHotkeys();
+  await refreshMicrophones();
+  await refreshAsrStatus();
   // poll once more shortly after boot in case backend started late
-  setTimeout(refreshBackendInfo, 1500);
+  setTimeout(() => { refreshBackendInfo(); refreshAsrStatus(); }, 1500);
+  // keep ASR status fresh while it loads in the background
+  const asrPoll = setInterval(refreshAsrStatus, 2500);
+  setTimeout(() => clearInterval(asrPoll), 60000);
 });

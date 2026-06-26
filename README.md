@@ -19,7 +19,7 @@ This repository is built **phase by phase**. Current state:
 | Phase | Scope | Status |
 |------|-------|--------|
 | 1 | Project setup, Electron shell, Python backend, IPC, installer | ✅ |
-| 2 | Microphone capture + Parakeet STT pipeline | ⏳ |
+| 2 | Microphone capture + Parakeet STT pipeline | ✅ |
 | 3 | Clipboard insertion, push-to-talk, toggle recording | ⏳ |
 | 4 | Clarify pipeline + automatic model routing | ⏳ |
 | 5 | Statistics, settings, local storage | ⏳ |
@@ -62,11 +62,31 @@ npm run setup:python
 npm run dev
 ```
 
+### Speech-to-text engines
+
+AFK supports two interchangeable Parakeet 0.6B v3 backends, auto-selected at
+load time (see [`config.select_asr_engine`](python/afk_backend/config.py)):
+
+| Engine | When used | Notes |
+|--------|-----------|-------|
+| **ONNX** (default) | no `.nemo` present | `onnx-asr`, int8, ~2 GB RAM, lightest |
+| **NeMo** (official) | a `.nemo` checkpoint is present | NVIDIA NeMo + PyTorch, official weights |
+
+To use the official NVIDIA checkpoint, drop
+`parakeet-tdt-0.6b-v3.nemo` into `models/parakeet-v3/` and install the toolkit:
+
+```bash
+python/.venv/Scripts/python -m pip install "nemo_toolkit[asr]"
+```
+
+For the ONNX engine, the int8 files download lazily from Hugging Face on first
+use (or place them in `models/parakeet-v3/`). Override paths with
+`AFK_NEMO_PATH`, `AFK_ASR_DIR`, or force an engine with `AFK_ASR_ENGINE`.
+
 ### Models
 
-Models are large and are **never committed to git**. They download lazily on
-first use into your user-data `models/` directory. Identifiers live in
-[`python/afk_backend/config.py`](python/afk_backend/config.py).
+Models are large and are **never committed to git** (see `.gitignore`). They
+live in `models/` or your user-data directory.
 
 ## Building the installer
 

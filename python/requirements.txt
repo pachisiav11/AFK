@@ -1,20 +1,22 @@
 # AFK backend dependencies.
-# Phase 1 uses only the Python standard library (no packages required).
 #
-# Later phases add (uncommented as each phase lands):
+# Phase 1 — core (stdlib only).
 #
-# Phase 2 — audio capture + Parakeet STT (CPU/ONNX):
-#   sounddevice>=0.4.6
-#   numpy>=1.26,<2.2
-#   onnxruntime>=1.17
-#   onnx-asr>=0.3.0
-#   huggingface-hub>=0.23
+# Phase 2 — audio capture + Parakeet 0.6B v3 STT (CPU):
+numpy>=1.26,<2.3
+sounddevice>=0.4.6
+soundfile>=0.12.1
+#
+# ASR engine A (default, light): Parakeet 0.6B v3 via ONNX Runtime.
+onnx-asr[cpu,hub]>=0.6.0
+#
+# ASR engine B (optional, official): NVIDIA NeMo + PyTorch (CPU).
+# Heavier (~3GB of deps) but runs the official .nemo checkpoint. Installed
+# on demand; uncomment if you want it provisioned by setup-python.js:
+#   nemo_toolkit[asr]>=2.7
 #
 # Phase 3 — clipboard / paste:
-#   pyperclip>=1.8.2
-#   (global hotkeys handled in Electron; keyboard injection via Electron/pywin32)
+#   (added in Phase 3)
 #
 # Phase 4 — Clarify (Gemma via GGUF/llama.cpp on CPU):
-#   llama-cpp-python>=0.2.79
-#
-# Pinning is finalized per phase in scripts/setup-python.js.
+#   (added in Phase 4)

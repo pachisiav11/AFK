@@ -63,12 +63,16 @@
             <div class="transcription" id="transcription">
               <span class="placeholder">Your transcription will appear here…</span>
             </div>
+            <div class="record-actions">
+              <button class="btn btn-primary" id="recordBtn">Start recording</button>
+              <span class="asr-status" id="asrStatus">Model: …</span>
+            </div>
           </div>
 
           <div class="card info-card">
             <div class="info-row">
               <span class="info-label">Microphone</span>
-              <span class="info-value" id="activeMic">—</span>
+              <select class="mic-select" id="micSelect"><option value="">System default</option></select>
             </div>
             <div class="info-row">
               <span class="info-label">Active model</span>
