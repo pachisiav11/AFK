@@ -68,12 +68,17 @@ class SettingsStore:
 
     def _save(self) -> None:
         try:
-            fd, tmp = tempfile.mkstemp(dir=str(self._path.parent), suffix=".tmp")
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(self._data, fh, indent=2, ensure_ascii=False)
-            os.replace(tmp, self._path)
+            _atomic_write_json(self._path, self._data)
         except Exception as exc:  # noqa: BLE001
             logutil.error(f"Failed to save settings: {exc}")
+
+
+def _atomic_write_json(path, data) -> None:
+    """Write JSON to `path` atomically (temp file + os.replace)."""
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
 
 
 def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:

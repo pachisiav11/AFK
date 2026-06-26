@@ -8,6 +8,25 @@ const logger = require('./logger');
 const paths = require('./paths');
 const { PythonBridge } = require('./python-bridge');
 
+let AutoLaunch = null;
+try { AutoLaunch = require('auto-launch'); } catch (_) { /* optional */ }
+
+let autoLauncher = null;
+function applyAutoLaunch(enabled) {
+  if (!AutoLaunch) return;
+  try {
+    if (!autoLauncher) {
+      autoLauncher = new AutoLaunch({ name: 'AFK', isHidden: true });
+    }
+    autoLauncher.isEnabled().then((isOn) => {
+      if (enabled && !isOn) autoLauncher.enable();
+      else if (!enabled && isOn) autoLauncher.disable();
+    }).catch(() => {});
+  } catch (e) {
+    logger.warn(`auto-launch failed: ${e.message}`);
+  }
+}
+
 // Single-instance lock — AFK is a tray app; never run twice.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -122,6 +141,15 @@ function startBackend() {
   bridge.on('ready', (info) => {
     logger.info(`Backend ready: ${JSON.stringify(info)}`);
     broadcast('backend:status', { ready: true, info });
+    // Apply OS-level preferences from saved settings.
+    bridge.call('get_settings', {}).then((cfg) => {
+      applyAutoLaunch(!!(cfg && cfg.startup_on_login));
+    }).catch(() => {});
+  });
+
+  // React to settings changes for OS-level behaviors (auto-launch).
+  bridge.on('event:settings_updated', (cfg) => {
+    applyAutoLaunch(!!(cfg && cfg.startup_on_login));
   });
 
   bridge.on('exit', () => broadcast('backend:status', { ready: false }));

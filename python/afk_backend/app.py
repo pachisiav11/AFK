@@ -20,6 +20,7 @@ from .transcription.transcriber import Transcriber
 from .clipboard.clipboard import Clipboard
 from .hotkeys import HotkeyManager
 from .clarify.engine import ClarifyEngine
+from .statistics import StatsStore
 
 
 class AFKApp:
@@ -46,14 +47,15 @@ class AFKApp:
         # Phase 4 service.
         self.clarifier = ClarifyEngine()
 
-        # Services added in later phases.
-        self.statistics = None       # Phase 5
+        # Phase 5 service.
+        self.statistics = StatsStore()
 
         self._methods: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_core()
         self._register_audio()
         self._register_clipboard_hotkeys()
         self._register_clarify()
+        self._register_statistics()
 
     # ---- lifecycle ----
     def on_started(self) -> None:
@@ -187,6 +189,13 @@ class AFKApp:
 
         result = self.transcriber.transcribe(audio, sample_rate=captured["sr"])
         result["duration"] = round(captured["duration"], 2)
+        # Record usage stats (words dictated, recording length, transcription latency).
+        try:
+            words = len((result.get("text") or "").split())
+            self.statistics.record_dictation(words, captured["duration"], result.get("latency_ms", 0))
+            emit_event("statistics_updated", {})
+        except Exception as exc:  # noqa: BLE001
+            logutil.warn(f"stats record failed: {exc}")
         emit_event("transcription", {"text": result["text"], "latency_ms": result["latency_ms"]})
         return result
 
@@ -262,7 +271,18 @@ class AFKApp:
             logutil.error(f"stop/transcribe failed: {exc}")
             return
         text = (result or {}).get("text", "")
-        if text and self.settings.get("auto_paste", True):
+        if not text:
+            return
+        # Optionally polish the dictation with Clarify before pasting.
+        if self.settings.get("auto_clarify", True) and self.clarifier.any_available():
+            threshold = self.settings.get("word_count_threshold", config.DEFAULT_WORD_THRESHOLD)
+            cr = self.clarifier.clarify(text, threshold=threshold)
+            self._record_clarify(cr)
+            polished = cr.get("text")
+            if polished:
+                text = polished
+                emit_event("transcription", {"text": text, "clarified": True})
+        if self.settings.get("auto_paste", True):
             self._paste(text)
 
     # ---- hotkey callbacks (run on the listener thread; offload heavy work) ----
@@ -281,6 +301,16 @@ class AFKApp:
     def _hk_clarify(self) -> None:
         threading.Thread(target=self._clarify_flow, daemon=True).start()
 
+    # ---- statistics methods (Phase 5) ----
+    def _register_statistics(self) -> None:
+        self.register("get_statistics", lambda p: self.statistics.snapshot())
+        self.register("reset_statistics", self._reset_statistics)
+
+    def _reset_statistics(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        self.statistics.reset()
+        emit_event("statistics_updated", {})
+        return self.statistics.snapshot()
+
     # ---- clarify methods (Phase 4) ----
     def _register_clarify(self) -> None:
         self.register("clarify", self._clarify_method)
@@ -289,7 +319,17 @@ class AFKApp:
     def _clarify_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
         text = params.get("text", "")
         threshold = params.get("threshold", self.settings.get("word_count_threshold"))
-        return self.clarifier.clarify(text, threshold=threshold)
+        result = self.clarifier.clarify(text, threshold=threshold)
+        self._record_clarify(result)
+        return result
+
+    def _record_clarify(self, result: Dict[str, Any]) -> None:
+        if result.get("model") not in (None, "none", "error") and result.get("latency_ms"):
+            try:
+                self.statistics.record_clarification(result["latency_ms"])
+                emit_event("statistics_updated", {})
+            except Exception as exc:  # noqa: BLE001
+                logutil.warn(f"stats record failed: {exc}")
 
     def _clarify_flow(self) -> None:
         """Hotkey Clarify: take the selection (or clipboard), polish, put it back.
@@ -319,6 +359,7 @@ class AFKApp:
 
         threshold = self.settings.get("word_count_threshold", config.DEFAULT_WORD_THRESHOLD)
         result = self.clarifier.clarify(text, threshold=threshold)
+        self._record_clarify(result)
         out = result.get("text", "") or text
 
         if had_selection:

@@ -1,1 +1,5 @@
-"""Usage statistics tracking. Implemented in Phase 5."""
+"""Usage statistics tracking."""
+
+from .store import StatsStore
+
+__all__ = ["StatsStore"]

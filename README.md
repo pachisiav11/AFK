@@ -21,8 +21,8 @@ This repository is built **phase by phase**. Current state:
 | 1 | Project setup, Electron shell, Python backend, IPC, installer | ✅ |
 | 2 | Microphone capture + Parakeet STT pipeline | ✅ |
 | 3 | Clipboard insertion, push-to-talk, toggle recording | ⏳ |
-| 4 | Clarify pipeline + automatic model routing | ⏳ |
-| 5 | Statistics, settings, local storage | ⏳ |
+| 4 | Clarify pipeline + automatic model routing | ✅ |
+| 5 | Statistics, settings, local storage | ✅ |
 | 6 | UI polish, performance, packaging, Windows installer | ⏳ |
 
 ## Architecture
