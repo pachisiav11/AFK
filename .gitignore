@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+python/.venv/
+python/venv/
+
+# Models (downloaded at runtime — never commit, can be multi-GB)
+models/
+*.onnx
+*.gguf
+*.nemo
+*.bin
+*.safetensors
+
+# Build output
+installer/dist/
+dist/
+build/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Local data / runtime
+*.log
+logs/
+.afk-data/
+*.sqlite
+*.sqlite3
+*.db
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.local
+
+# Keep the docx guide out of the published repo? No — keep docs.

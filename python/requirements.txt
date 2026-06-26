@@ -1,0 +1,20 @@
+# AFK backend dependencies.
+# Phase 1 uses only the Python standard library (no packages required).
+#
+# Later phases add (uncommented as each phase lands):
+#
+# Phase 2 — audio capture + Parakeet STT (CPU/ONNX):
+#   sounddevice>=0.4.6
+#   numpy>=1.26,<2.2
+#   onnxruntime>=1.17
+#   onnx-asr>=0.3.0
+#   huggingface-hub>=0.23
+#
+# Phase 3 — clipboard / paste:
+#   pyperclip>=1.8.2
+#   (global hotkeys handled in Electron; keyboard injection via Electron/pywin32)
+#
+# Phase 4 — Clarify (Gemma via GGUF/llama.cpp on CPU):
+#   llama-cpp-python>=0.2.79
+#
+# Pinning is finalized per phase in scripts/setup-python.js.
