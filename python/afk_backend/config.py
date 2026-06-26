@@ -54,7 +54,6 @@ def local_asr_dir() -> Path:
 LOCAL_ASR_REQUIRED = (
     "encoder-model.int8.onnx",
     "decoder_joint-model.int8.onnx",
-    "nemo128.onnx",
     "vocab.txt",
     "config.json",
 )

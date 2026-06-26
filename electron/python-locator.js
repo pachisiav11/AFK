@@ -6,7 +6,7 @@
  *
  * Dev:
  *   - Prefer python/.venv (created by `npm run setup:python`)
- *   - Fall back to the Windows `py -3.11` launcher, then `python`
+ *   - Fall back to a system Python 3.11/3.12 interpreter
  *   Backend entry: <repo>/python/main.py
  *
  * Production (packaged):
@@ -16,6 +16,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 function isPackaged() {
   // app.isPackaged is the source of truth, but this module is also used by
@@ -47,6 +48,31 @@ function exists(p) {
   }
 }
 
+function commandWorks(command, args) {
+  try {
+    const res = spawnSync(command, [...args, '--version'], {
+      encoding: 'utf-8',
+      windowsHide: true
+    });
+    return res.status === 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+function findSystemPython() {
+  const candidates = process.platform === 'win32'
+    ? [['py', ['-3.11']], ['py', ['-3.12']], ['python', []]]
+    : [['python3.11', []], ['python3.12', []], ['python3', []]];
+
+  for (const [command, args] of candidates) {
+    if (commandWorks(command, args)) return { command, args };
+  }
+  return process.platform === 'win32'
+    ? { command: 'py', args: ['-3.11'] }
+    : { command: 'python3', args: [] };
+}
+
 /**
  * Resolve the python command + leading args.
  * @returns {{ command: string, args: string[] }}
@@ -64,13 +90,8 @@ function resolvePython() {
   const runtimeWin = path.join(root, 'runtime', 'python.exe');
   if (exists(runtimeWin)) return { command: runtimeWin, args: [] };
 
-  // 3. Windows launcher pinned to 3.11 (dev fallback).
-  if (process.platform === 'win32') {
-    return { command: 'py', args: ['-3.11'] };
-  }
-
-  // 4. Generic fallback.
-  return { command: 'python3', args: [] };
+  // 3. System Python fallback (dev machines / non-self-contained packages).
+  return findSystemPython();
 }
 
-module.exports = { resolvePython, backendEntry, pythonRoot, isPackaged };
+module.exports = { resolvePython, backendEntry, pythonRoot, isPackaged, findSystemPython };

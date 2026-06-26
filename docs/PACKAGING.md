@@ -63,7 +63,7 @@ machine, bundle the Python runtime as well. Two supported approaches:
    CPython and run `setup-python` on first launch. Smaller installer, requires
    network on first run.
 
-Without either, the packaged app falls back to a system `py -3.11`
+Without either, the packaged app falls back to a system Python 3.11/3.12
 (see `python-locator.js`) — fine for developer machines, not for end users.
 
 ## No console windows
