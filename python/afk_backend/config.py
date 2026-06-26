@@ -107,10 +107,100 @@ def stats_path() -> Path:
 # ---- Model identifiers (used from Phase 2/4 onward) ----
 PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 GEMMA_SHORT_MODEL = "gemma-3-270m-it"
-GEMMA_LONG_MODEL = "gemma-3n-e2b-it"
+GEMMA_LONG_MODEL = "gemma-4-e2b-it"
 
 # Default word-count threshold for short vs. long clarification model.
 DEFAULT_WORD_THRESHOLD = 60
+
+# Clarify model GGUF filenames + their Hugging Face source repos.
+CLARIFY_SHORT_GGUF = "gemma-3-270m-it-Q8_0.gguf"
+CLARIFY_LONG_GGUF = "gemma-4-E2B_q4_0-it.gguf"
+CLARIFY_SHORT_REPO = "unsloth/gemma-3-270m-it-GGUF"
+CLARIFY_LONG_REPO = "google/gemma-4-E2B-it-qat-q4_0-gguf"
+
+# The Clarify system instruction (from the project spec).
+CLARIFY_PROMPT = (
+    "Correct grammar, punctuation, capitalization, and minor wording while "
+    "preserving the original meaning, tone, names, and technical terms. "
+    "Do not add or remove information. Return only the corrected text."
+)
+
+# Few-shot examples used to coax the tiny short model (Gemma 3 270M) into
+# actually performing the edit rather than echoing the input. Presented as
+# prior user/assistant turns.
+CLARIFY_FEWSHOT = (
+    ("i dont no where he wnet yesterday", "I do not know where he went yesterday."),
+    ("she dont like cofee in the mornin", "She does not like coffee in the morning."),
+    ("can u snd me teh file wen ur done plz", "Can you send me the file when you are done, please?"),
+)
+
+
+def llama_server_path() -> Path:
+    """Locate the official llama.cpp `llama-server` binary.
+
+    Search: $AFK_LLAMA_SERVER, else <repo>/vendor/llama.cpp, else bundled
+    resources/vendor/llama.cpp (packaged app). We use the upstream prebuilt
+    binary (runtime CPU dispatch — picks AVX2 on CPUs without AVX-512) rather
+    than llama-cpp-python, whose wheels require AVX-512.
+    """
+    exe = "llama-server.exe" if os.name == "nt" else "llama-server"
+    env = os.environ.get("AFK_LLAMA_SERVER")
+    if env:
+        return Path(env)
+    repo_local = Path(__file__).resolve().parents[2] / "vendor" / "llama.cpp" / exe
+    if repo_local.exists():
+        return repo_local
+    res = os.environ.get("AFK_RESOURCES")
+    if res:
+        return Path(res) / "vendor" / "llama.cpp" / exe
+    return repo_local
+
+
+def clarify_dir() -> Path:
+    """Directory holding the Clarify GGUF model files.
+
+    Mirrors the ASR layout: $AFK_CLARIFY_DIR, else <repo>/models/clarify,
+    else <models_dir>/clarify.
+    """
+    env = os.environ.get("AFK_CLARIFY_DIR")
+    if env:
+        return Path(env)
+    repo_local = Path(__file__).resolve().parents[2] / "models" / "clarify"
+    if repo_local.exists():
+        return repo_local
+    return models_dir() / "clarify"
+
+
+def _resolve_gguf(preferred: str, *contains: str) -> Path:
+    """Find a GGUF in the clarify dir.
+
+    Prefer the exact expected filename; otherwise match any *.gguf whose name
+    contains all the given substrings (case-insensitive), skipping vision
+    projector files ('mmproj'). This tolerates the many community naming
+    conventions (e.g. 'google_gemma-3-270m-it-Q4_K_M.gguf').
+    """
+    d = clarify_dir()
+    exact = d / preferred
+    if exact.exists():
+        return exact
+    try:
+        for p in sorted(d.glob("*.gguf")):
+            name = p.name.lower()
+            if "mmproj" in name:
+                continue
+            if all(c.lower() in name for c in contains):
+                return p
+    except Exception:
+        pass
+    return exact  # default (may not exist; callers handle 'missing')
+
+
+def clarify_short_path() -> Path:
+    return _resolve_gguf(CLARIFY_SHORT_GGUF, "270m")
+
+
+def clarify_long_path() -> Path:
+    return _resolve_gguf(CLARIFY_LONG_GGUF, "e2b")
 
 # Typing speed assumption for "time saved" stats (words per minute).
 TYPING_WPM = 40

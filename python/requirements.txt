@@ -19,5 +19,10 @@ onnx-asr[cpu,hub]>=0.6.0
 pynput>=1.7.6
 pyperclip>=1.8.2
 #
-# Phase 4 — Clarify (Gemma via GGUF/llama.cpp on CPU):
-#   (added in Phase 4)
+# Phase 4 — Clarify (Gemma GGUF on CPU).
+# Inference runs through the official llama.cpp `llama-server` binary (vendored
+# under vendor/llama.cpp), NOT llama-cpp-python: the prebuilt python wheels
+# require AVX-512, which consumer Raptor Lake CPUs (e.g. i7-1360P) lack. The
+# upstream binary ships per-microarch CPU backends and picks AVX2 at runtime.
+# No extra Python package required (we call the server over HTTP via stdlib).
+# Short model: Gemma 3 270M IT; long model: Gemma 4 E2B IT.

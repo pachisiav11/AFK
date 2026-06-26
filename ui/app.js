@@ -116,6 +116,36 @@ async function onMicChange() {
   try { await window.afk.call('update_settings', { patch: { microphone: value } }); } catch (e) {}
 }
 
+// ---------- Clarify (Phase 4) ----------
+async function refreshClarifyStatus() {
+  try {
+    const s = await window.afk.call('clarify_status', {});
+    const label = (st) => (st === 'loaded' ? 'ready' : st);
+    $('#clarifyModels').textContent = `short: ${label(s.short)} · long: ${label(s.long)}`;
+  } catch (e) { /* ignore */ }
+}
+
+async function clarifyText() {
+  const btn = $('#clarifyBtn');
+  const input = $('#clarifyInput').value.trim();
+  if (!input) return;
+  btn.disabled = true;
+  btn.textContent = 'Clarifying…';
+  $('#clarifyMeta').textContent = '';
+  try {
+    const res = await window.afk.call('clarify', { text: input });
+    $('#clarifyOutput').textContent = res.text || '(no output)';
+    const model = res.model && res.model !== 'none' ? res.model : 'no model installed';
+    $('#clarifyMeta').textContent = `${res.words} words → ${model}` +
+      (res.latency_ms ? ` · ${res.latency_ms} ms` : '');
+  } catch (e) {
+    $('#clarifyOutput').textContent = '⚠ ' + (e.message || 'Clarify failed');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Clarify';
+  }
+}
+
 // ---------- Hotkeys display (filled in later phases) ----------
 async function refreshHotkeys() {
   try {
@@ -145,6 +175,7 @@ function initEvents() {
       refreshHotkeys();
       refreshMicrophones();
       refreshAsrStatus();
+      refreshClarifyStatus();
     }
   });
 
@@ -158,6 +189,13 @@ function initEvents() {
         break;
       case 'transcription':
         showTranscription(data && data.text);
+        break;
+      case 'clarify_done':
+        if (data && data.text) {
+          $('#clarifyOutput').textContent = data.text;
+          $('#clarifyMeta').textContent = `${data.model || ''}` +
+            (data.latency_ms ? ` · ${data.latency_ms} ms` : '');
+        }
         break;
       default:
         break;
@@ -196,11 +234,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   initEvents();
   $('#recordBtn').addEventListener('click', toggleRecord);
   $('#micSelect').addEventListener('change', onMicChange);
+  $('#clarifyBtn').addEventListener('click', clarifyText);
   await initAbout();
   await refreshBackendInfo();
   await refreshHotkeys();
   await refreshMicrophones();
   await refreshAsrStatus();
+  await refreshClarifyStatus();
   // poll once more shortly after boot in case backend started late
   setTimeout(() => { refreshBackendInfo(); refreshAsrStatus(); }, 1500);
   // keep ASR status fresh while it loads in the background

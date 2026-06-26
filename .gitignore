@@ -11,6 +11,9 @@ models/
 *.bin
 *.safetensors
 
+# Vendored native binaries (downloaded, not committed; re-fetched per platform)
+vendor/
+
 # Build output
 installer/dist/
 dist/

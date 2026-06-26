@@ -6,6 +6,7 @@ to Electron through a flat method table. Keeping the table explicit makes the
 backend API easy to audit and version.
 """
 
+import os
 import platform
 import sys
 import threading
@@ -18,6 +19,7 @@ from .audio.recorder import Recorder, process as process_audio
 from .transcription.transcriber import Transcriber
 from .clipboard.clipboard import Clipboard
 from .hotkeys import HotkeyManager
+from .clarify.engine import ClarifyEngine
 
 
 class AFKApp:
@@ -41,22 +43,27 @@ class AFKApp:
             }
         )
 
+        # Phase 4 service.
+        self.clarifier = ClarifyEngine()
+
         # Services added in later phases.
-        self.clarifier = None        # Phase 4
         self.statistics = None       # Phase 5
 
         self._methods: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_core()
         self._register_audio()
         self._register_clipboard_hotkeys()
+        self._register_clarify()
 
     # ---- lifecycle ----
     def on_started(self) -> None:
         """Called once the RPC loop is live; announce readiness to Electron."""
         emit_event("ready", self.get_info({}))
-        # Warm up the ASR model in the background so the first dictation is fast.
-        # (Downloads weights on first ever run; subsequent runs are instant.)
-        self.transcriber.preload_async()
+        # Warm up models in the background so the first use is fast.
+        # AFK_NO_PRELOAD lets tests skip spawning model processes.
+        if not os.environ.get("AFK_NO_PRELOAD"):
+            self.transcriber.preload_async()
+            self.clarifier.preload_short_async()
         # Arm global hotkeys from saved settings.
         try:
             self.hotkeys.set_bindings(self.settings.get("hotkeys", {}))
@@ -73,6 +80,10 @@ class AFKApp:
         try:
             if self.recorder.is_recording:
                 self.recorder.stop()
+        except Exception:
+            pass
+        try:
+            self.clarifier.shutdown()
         except Exception:
             pass
 
@@ -101,19 +112,18 @@ class AFKApp:
             "platform": platform.platform(),
             "backend": "afk-backend",
             "models_status": self._models_status(),
-            "default_model": "auto (Gemma 3 270M / Gemma 3n E2B)",
+            "default_model": "auto (Gemma 3 270M / Gemma 4 E2B)",
             "asr_model": config.PARAKEET_MODEL,
             "data_dir": str(config.data_dir()),
             "models_dir": str(config.models_dir()),
         }
 
     def _models_status(self) -> str:
-        parts = [f"asr[{self.transcriber.engine}]: {self.transcriber.status}"]
-        if self.clarifier is not None:
-            parts.append("clarify: loaded")
-        else:
-            parts.append("clarify: not loaded (Phase 4)")
-        return ", ".join(parts)
+        cs = self.clarifier.status()
+        return (
+            f"asr[{self.transcriber.engine}]: {self.transcriber.status}, "
+            f"clarify(short): {cs['short']}, clarify(long): {cs['long']}"
+        )
 
     def update_settings(self, params: Dict[str, Any]) -> Dict[str, Any]:
         patch = params.get("patch") or params
@@ -269,12 +279,60 @@ class AFKApp:
             threading.Thread(target=self._start_rec_safe, daemon=True).start()
 
     def _hk_clarify(self) -> None:
-        def _run():
-            if self.clarifier is None:
-                logutil.info("Clarify hotkey pressed (Clarify lands in Phase 4)")
-                emit_event("clarify_unavailable", {"reason": "Clarify lands in Phase 4"})
-                return
-            # Phase 4 implements the full selection->clarify->replace flow.
-            self._clarify_flow()
+        threading.Thread(target=self._clarify_flow, daemon=True).start()
 
-        threading.Thread(target=_run, daemon=True).start()
+    # ---- clarify methods (Phase 4) ----
+    def _register_clarify(self) -> None:
+        self.register("clarify", self._clarify_method)
+        self.register("clarify_status", lambda p: self.clarifier.status())
+
+    def _clarify_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        text = params.get("text", "")
+        threshold = params.get("threshold", self.settings.get("word_count_threshold"))
+        return self.clarifier.clarify(text, threshold=threshold)
+
+    def _clarify_flow(self) -> None:
+        """Hotkey Clarify: take the selection (or clipboard), polish, put it back.
+
+        1. Capture selected text (Ctrl+C). If empty, fall back to clipboard.
+        2. Route by word count and clarify.
+        3. Replace the selection by pasting (or update the clipboard if we used
+           the clipboard fallback).
+        """
+        if not self.clarifier.any_available():
+            logutil.warn("Clarify requested but no model available")
+            emit_event("clarify_unavailable", {"reason": "No Clarify model installed"})
+            return
+
+        # Capture selection with the listener suppressed (we synthesize Ctrl+C).
+        try:
+            self.hotkeys.set_injecting(True)
+            selection = self.clipboard.capture_selection()
+        finally:
+            self.hotkeys.set_injecting(False)
+
+        had_selection = bool(selection.strip())
+        text = selection.strip() or self.clipboard.get_text().strip()
+        if not text:
+            emit_event("clarify_done", {"text": "", "model": "none", "empty": True})
+            return
+
+        threshold = self.settings.get("word_count_threshold", config.DEFAULT_WORD_THRESHOLD)
+        result = self.clarifier.clarify(text, threshold=threshold)
+        out = result.get("text", "") or text
+
+        if had_selection:
+            # Replace the highlighted text in place.
+            try:
+                self.hotkeys.set_injecting(True)
+                self.clipboard.replace_selection(out)
+            finally:
+                self.hotkeys.set_injecting(False)
+        else:
+            # No selection — just update the clipboard with the polished text.
+            self.clipboard.set_text(out)
+
+        emit_event(
+            "clarify_done",
+            {"text": out, "model": result.get("model"), "latency_ms": result.get("latency_ms")},
+        )

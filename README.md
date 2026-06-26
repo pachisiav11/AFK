@@ -34,7 +34,7 @@ Electron (UI, tray, global hotkeys, packaging)
 Python backend
     ├── audio          (capture, VAD, noise suppression)
     ├── transcription  (Parakeet 0.6B v3, ONNX/CPU)
-    ├── clarify        (Gemma 3 270M / Gemma 3n E2B, GGUF/CPU)
+    ├── clarify        (Gemma 3 270M / Gemma 4 E2B, GGUF/CPU)
     ├── clipboard      (selection replacement, paste)
     ├── statistics     (local usage metrics)
     └── settings       (JSON-backed preferences)

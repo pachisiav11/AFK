@@ -63,6 +63,7 @@ class TestSubprocessRpc(unittest.TestCase):
         env["AFK_DATA_DIR"] = tempfile.mkdtemp()
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        env["AFK_NO_PRELOAD"] = "1"  # don't spawn model processes during the test
 
         proc = subprocess.Popen(
             [sys.executable, str(PY_DIR / "main.py")],
