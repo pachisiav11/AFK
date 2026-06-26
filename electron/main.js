@@ -134,7 +134,11 @@ function broadcast(channel, payload) {
 }
 
 function startBackend() {
-  bridge = new PythonBridge({ dataDir: paths.dataDir() });
+  bridge = new PythonBridge({
+    dataDir: paths.dataDir(),
+    modelsDir: paths.modelsDir(),
+    resourcesPath: app.isPackaged ? process.resourcesPath : ''
+  });
 
   bridge.on('log', ({ level, msg }) => logger[level] ? logger[level](msg) : logger.info(msg));
 

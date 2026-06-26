@@ -23,7 +23,7 @@ This repository is built **phase by phase**. Current state:
 | 3 | Clipboard insertion, push-to-talk, toggle recording | ⏳ |
 | 4 | Clarify pipeline + automatic model routing | ✅ |
 | 5 | Statistics, settings, local storage | ✅ |
-| 6 | UI polish, performance, packaging, Windows installer | ⏳ |
+| 6 | UI polish, performance, packaging, Windows installer | ✅ |
 
 ## Architecture
 
@@ -91,8 +91,27 @@ live in `models/` or your user-data directory.
 ## Building the installer
 
 ```bash
-npm run dist   # produces a one-click NSIS .exe in installer/dist/
+python/.venv/Scripts/python scripts/make_icons.py   # generate app icons
+npm run dist                                         # one-click NSIS .exe in installer/dist/
 ```
+
+The installer bundles the Electron app, the Python backend source, and the
+AVX2 `llama-server` binary. Model weights and the Python ML dependencies are
+provisioned separately (they total ~9 GB) — see
+[docs/PACKAGING.md](docs/PACKAGING.md) for the full bundling strategy, including
+how to produce a fully self-contained installer.
+
+## Hotkeys (defaults — all remappable in Settings)
+
+| Action | Default | Behaviour |
+|--------|---------|-----------|
+| Push-to-talk | `Ctrl+Space` (hold) | Hold to record, release to transcribe + paste |
+| Toggle recording | `Ctrl+Shift+Space` | Press to start/stop; auto-clarifies before paste |
+| Clarify | `Ctrl+Shift+C` | Polish selected text (or clipboard) in place |
+
+> The spec's `Ctrl+Fn` combos aren't usable — the `Fn` key is handled in
+> keyboard firmware and isn't visible to software — so AFK ships reliable,
+> fully-remappable defaults instead.
 
 ## License
 
