@@ -58,7 +58,10 @@ npm install
 # 2. Create the Python backend venv + deps
 npm run setup:python
 
-# 3. Run in dev mode (DevTools open, verbose logging)
+# 3. Optional: install local grammar-correction models + llama-server
+npm run setup:clarify
+
+# 4. Run in dev mode (DevTools open, verbose logging)
 npm run dev
 ```
 
@@ -82,6 +85,39 @@ python/.venv/Scripts/python -m pip install "nemo_toolkit[asr]"
 For the ONNX engine, the int8 files download lazily from Hugging Face on first
 use (or place them in `models/parakeet-v3/`). Override paths with
 `AFK_NEMO_PATH`, `AFK_ASR_DIR`, or force an engine with `AFK_ASR_ENGINE`.
+
+### Clarify / Grammar Correction
+
+AFK's grammar-correction commands use two local GGUF models served by the
+official `llama.cpp` `llama-server` binary:
+
+| Purpose | Source | File |
+|---------|--------|------|
+| Short corrections | `ggml-org/gemma-3-270m-GGUF` | `gemma-3-270m-Q8_0.gguf` |
+| Long corrections | `ggml-org/gemma-4-E2B-it-GGUF` | `gemma-4-E2B-it-Q8_0.gguf` |
+| Runtime | `ggml-org/llama.cpp` GitHub releases | Windows CPU x64 `llama-server.exe` |
+
+Recommended Windows install:
+
+```powershell
+npm run setup:python
+npm run setup:clarify
+```
+
+Manual equivalent:
+
+```powershell
+New-Item -ItemType Directory -Force -Path ".\models\clarify" | Out-Null
+New-Item -ItemType Directory -Force -Path ".\vendor\llama.cpp" | Out-Null
+
+.\python\.venv\Scripts\python.exe -m pip install -U huggingface_hub
+.\python\.venv\Scripts\huggingface-cli.exe download ggml-org/gemma-3-270m-GGUF gemma-3-270m-Q8_0.gguf --local-dir ".\models\clarify"
+.\python\.venv\Scripts\huggingface-cli.exe download ggml-org/gemma-4-E2B-it-GGUF gemma-4-E2B-it-Q8_0.gguf --local-dir ".\models\clarify"
+```
+
+Then download the latest Windows CPU x64 `llama.cpp` release from
+`https://github.com/ggml-org/llama.cpp/releases`, extract it, and copy
+`llama-server.exe` to `vendor\llama.cpp\llama-server.exe`.
 
 ### Models
 

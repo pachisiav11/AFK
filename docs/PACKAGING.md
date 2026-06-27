@@ -15,7 +15,7 @@ Config lives in the `build` field of [`package.json`](../package.json).
 |-----------|----------|---------------------|
 | Electron runtime + UI | ✅ | `resources/app.asar` |
 | Python backend **source** | ✅ | `resources/python/` |
-| llama.cpp `llama-server` (AVX2 CPU build) | ✅ | `resources/vendor/llama.cpp/` |
+| llama.cpp `llama-server` (Windows CPU x64 build) | ✅ | `resources/vendor/llama.cpp/` |
 | App icons | ✅ | bundled |
 | Python interpreter + ML deps (torch, NeMo, onnx…) | ❌ provisioned | see below |
 | Model weights (Parakeet, Gemma) | ❌ downloaded | user-data `models/` |

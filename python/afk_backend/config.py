@@ -112,10 +112,10 @@ GEMMA_LONG_MODEL = "gemma-4-e2b-it"
 DEFAULT_WORD_THRESHOLD = 60
 
 # Clarify model GGUF filenames + their Hugging Face source repos.
-CLARIFY_SHORT_GGUF = "gemma-3-270m-it-Q8_0.gguf"
-CLARIFY_LONG_GGUF = "gemma-4-E2B_q4_0-it.gguf"
-CLARIFY_SHORT_REPO = "unsloth/gemma-3-270m-it-GGUF"
-CLARIFY_LONG_REPO = "google/gemma-4-E2B-it-qat-q4_0-gguf"
+CLARIFY_SHORT_GGUF = "gemma-3-270m-Q8_0.gguf"
+CLARIFY_LONG_GGUF = "gemma-4-E2B-it-Q8_0.gguf"
+CLARIFY_SHORT_REPO = "ggml-org/gemma-3-270m-GGUF"
+CLARIFY_LONG_REPO = "ggml-org/gemma-4-E2B-it-GGUF"
 
 # The Clarify system instruction (from the project spec).
 CLARIFY_PROMPT = (
@@ -139,7 +139,7 @@ def llama_server_path() -> Path:
 
     Search: $AFK_LLAMA_SERVER, else <repo>/vendor/llama.cpp, else bundled
     resources/vendor/llama.cpp (packaged app). We use the upstream prebuilt
-    binary (runtime CPU dispatch — picks AVX2 on CPUs without AVX-512) rather
+    Windows CPU binary (runtime CPU dispatch) rather
     than llama-cpp-python, whose wheels require AVX-512.
     """
     exe = "llama-server.exe" if os.name == "nt" else "llama-server"

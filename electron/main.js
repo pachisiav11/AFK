@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -34,9 +34,11 @@ if (!gotLock) {
 }
 
 let mainWindow = null;
+let overlayWindow = null;
 let tray = null;
 let bridge = null;
 let isQuitting = false;
+let overlayHideTimer = null;
 
 const DEV = !!process.env.AFK_DEV;
 
@@ -91,6 +93,75 @@ function createWindow() {
   });
 
   if (DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
+}
+
+function positionOverlay() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const { x, y, width, height } = display.workArea;
+  const [overlayWidth, overlayHeight] = overlayWindow.getSize();
+  overlayWindow.setPosition(
+    Math.round(x + (width - overlayWidth) / 2),
+    Math.round(y + height - overlayHeight - 28),
+    false
+  );
+}
+
+function createOverlayWindow() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) return;
+
+  overlayWindow = new BrowserWindow({
+    width: 460,
+    height: 78,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  overlayWindow.loadFile(path.join(__dirname, '..', 'ui', 'overlay.html'));
+  overlayWindow.on('closed', () => { overlayWindow = null; });
+  positionOverlay();
+}
+
+function setOverlayState(state, payload = {}) {
+  createOverlayWindow();
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (overlayHideTimer) {
+    clearTimeout(overlayHideTimer);
+    overlayHideTimer = null;
+  }
+  positionOverlay();
+  overlayWindow.webContents.send('overlay:state', { state, ...payload });
+  if (state === 'hidden') {
+    overlayWindow.hide();
+    return;
+  }
+  overlayWindow.showInactive();
+}
+
+function hideOverlaySoon(delayMs = 1800) {
+  if (overlayHideTimer) clearTimeout(overlayHideTimer);
+  overlayHideTimer = setTimeout(() => {
+    setOverlayState('hidden');
+  }, delayMs);
 }
 
 function createTray() {
@@ -156,10 +227,30 @@ function startBackend() {
     applyAutoLaunch(!!(cfg && cfg.startup_on_login));
   });
 
-  bridge.on('exit', () => broadcast('backend:status', { ready: false }));
+  bridge.on('exit', () => {
+    broadcast('backend:status', { ready: false });
+    setOverlayState('hidden');
+  });
 
   // Forward all backend events to the renderer under a single channel.
-  bridge.on('event', (event, data) => broadcast('backend:event', { event, data }));
+  bridge.on('event', (event, data) => {
+    broadcast('backend:event', { event, data });
+    if (event === 'recording_started') {
+      setOverlayState('recording', { label: 'Listening' });
+    } else if (event === 'recording_stopped') {
+      setOverlayState('processing', { label: 'Transcribing' });
+    } else if (event === 'transcription') {
+      const text = data && data.text ? String(data.text) : '';
+      setOverlayState('done', { label: text ? 'Ready to paste' : 'No speech detected' });
+      hideOverlaySoon(text ? 1400 : 1800);
+    } else if (event === 'pasted') {
+      setOverlayState('done', { label: 'Pasted' });
+      hideOverlaySoon(900);
+    } else if (event === 'clarify_done') {
+      setOverlayState('done', { label: 'Corrected' });
+      hideOverlaySoon(1200);
+    }
+  });
 
   bridge.start();
 }
@@ -170,7 +261,8 @@ function registerIpc() {
   // Generic pass-through to the Python backend.
   ipcMain.handle('afk:call', async (_evt, { method, params }) => {
     if (!bridge) throw new Error('Backend not initialised');
-    return bridge.call(method, params || {});
+    const longCalls = new Set(['load_asr', 'stop_recording', 'transcribe', 'clarify']);
+    return bridge.call(method, params || {}, longCalls.has(method) ? 10 * 60 * 1000 : undefined);
   });
 
   ipcMain.handle('afk:backendReady', () => (bridge ? bridge.isReady : false));
@@ -206,8 +298,13 @@ app.whenReady().then(() => {
 
   registerIpc();
   createTray();
+  createOverlayWindow();
   startBackend();
   createWindow();
+
+  screen.on('display-metrics-changed', positionOverlay);
+  screen.on('display-added', positionOverlay);
+  screen.on('display-removed', positionOverlay);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

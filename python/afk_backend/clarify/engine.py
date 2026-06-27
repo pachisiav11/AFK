@@ -96,11 +96,12 @@ class ClarifyModel:
     def clarify(self, text: str) -> str:
         self.ensure_loaded()
         max_tokens = min(self.n_ctx - 256, max(64, int(len(text.split()) * 3) + 64))
-        return self._server.chat(
+        corrected = self._server.chat(
             messages=self._build_messages(text),
             temperature=0.0,
             max_tokens=max_tokens,
         )
+        return _clean_correction(corrected)
 
     def stop(self) -> None:
         if self._server is not None:
@@ -183,3 +184,17 @@ class ClarifyEngine:
             "latency_ms": int((time.time() - t0) * 1000),
             "words": words,
         }
+
+
+def _clean_correction(text: str) -> str:
+    """Keep hotkey grammar output paste-ready across model families."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    for prefix in ("Corrected text:", "Correction:", "Output:", "Answer:"):
+        if text.lower().startswith(prefix.lower()):
+            text = text[len(prefix):].strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        text = text[1:-1].strip()
+    return text

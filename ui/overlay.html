@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self'; script-src 'self';" />
+  <title>AFK Dictation</title>
+  <link rel="stylesheet" href="overlay.css" />
+</head>
+<body>
+  <div class="dictation-bar" id="bar" data-state="recording">
+    <div class="status-dot"></div>
+    <div class="copy">
+      <span class="label" id="label">Listening</span>
+      <span class="sub" id="sub">AFK is capturing your voice</span>
+    </div>
+    <div class="wave" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span>
+    </div>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

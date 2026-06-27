@@ -2,7 +2,7 @@
   "name": "afk",
   "productName": "AFK",
   "version": "0.1.0",
-  "description": "AFK — privacy-first, fully-local AI speech-to-text for Windows.",
+  "description": "AFK - privacy-first, fully-local AI speech-to-text for Windows.",
   "author": {
     "name": "pachisiav11"
   },
@@ -12,6 +12,7 @@
     "start": "electron .",
     "dev": "cross-env AFK_DEV=1 electron .",
     "setup:python": "node scripts/setup-python.js",
+    "setup:clarify": "powershell -ExecutionPolicy Bypass -File scripts/setup-clarify.ps1",
     "rebuild": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",

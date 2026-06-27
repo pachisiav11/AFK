@@ -7,7 +7,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "python"))
 
-from afk_backend.clarify.engine import ClarifyEngine  # noqa: E402
+from afk_backend.clarify.engine import ClarifyEngine, _clean_correction  # noqa: E402
 
 
 class FakeModel:
@@ -76,6 +76,10 @@ class TestRouting(unittest.TestCase):
         res = self.engine.clarify("   ", threshold=60)
         self.assertEqual(res["model"], "none")
         self.assertEqual(res["text"], "")
+
+    def test_clean_correction_removes_wrappers(self):
+        self.assertEqual(_clean_correction('Correction: "Hello there."'), "Hello there.")
+        self.assertEqual(_clean_correction("```\nHello there.\n```"), "Hello there.")
 
 
 if __name__ == "__main__":
