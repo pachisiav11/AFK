@@ -46,7 +46,6 @@
         "to": "python",
         "filter": [
           "**/*",
-          "!.venv/**",
           "!**/__pycache__/**",
           "!**/*.pyc"
         ]
