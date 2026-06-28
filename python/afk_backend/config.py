@@ -109,7 +109,9 @@ GEMMA_SHORT_MODEL = "gemma-3-270m-it"
 GEMMA_LONG_MODEL = "gemma-4-e2b-it"
 
 # Default word-count threshold for short vs. long clarification model.
-DEFAULT_WORD_THRESHOLD = 60
+# The 270M model is fast but too small for sentence-level grammar cleanup, so
+# route normal dictation/Clarify requests to Gemma 4 by default.
+DEFAULT_WORD_THRESHOLD = 4
 
 # Clarify model GGUF filenames + their Hugging Face source repos.
 CLARIFY_SHORT_GGUF = "gemma-3-270m-Q8_0.gguf"

@@ -13,7 +13,6 @@ selection-capture so dictation never clobbers what they had copied.
 import threading
 import time
 import uuid
-from typing import Optional
 
 try:
     import pyperclip
@@ -35,8 +34,8 @@ else:
 from .. import logutil
 
 # Small delays let the target app observe clipboard changes / key events.
-_CLIPBOARD_SETTLE = 0.04
-_KEY_SETTLE = 0.02
+_CLIPBOARD_SETTLE = 0.015
+_KEY_SETTLE = 0.01
 
 
 class Clipboard:
@@ -118,3 +117,73 @@ class Clipboard:
     def replace_selection(self, text: str) -> bool:
         """Replace the currently selected text by pasting over it."""
         return self.paste_text(text, restore=True)
+
+    def paste_or_copy(self, text: str) -> str:
+        """Paste immediately; copy only if synthetic paste fails.
+
+        Chromium/Electron text boxes often do not expose a normal Win32 caret,
+        so textbox detection is too fragile for dictation. Use the user's
+        explicit auto-paste preference as intent and restore the clipboard
+        after Ctrl+V.
+        """
+        if not text:
+            return "empty"
+        try:
+            self.paste_text(text, restore=True)
+            return "pasted"
+        except Exception as exc:  # noqa: BLE001
+            logutil.warn(f"paste failed; copying instead: {exc}")
+            self.set_text(text)
+            return "copied"
+
+
+def active_text_target() -> bool:
+    """Best-effort Windows check for whether the foreground focus has a caret."""
+    try:
+        import ctypes
+
+        return _active_text_target_windows(ctypes)
+    except Exception:
+        return False
+
+
+def _active_text_target_windows(ctypes_module) -> bool:
+    try:
+        from ctypes import wintypes
+
+        class RECT(ctypes_module.Structure):
+            _fields_ = [
+                ("left", wintypes.LONG),
+                ("top", wintypes.LONG),
+                ("right", wintypes.LONG),
+                ("bottom", wintypes.LONG),
+            ]
+
+        class GUITHREADINFO(ctypes_module.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("flags", wintypes.DWORD),
+                ("hwndActive", wintypes.HWND),
+                ("hwndFocus", wintypes.HWND),
+                ("hwndCapture", wintypes.HWND),
+                ("hwndMenuOwner", wintypes.HWND),
+                ("hwndMoveSize", wintypes.HWND),
+                ("hwndCaret", wintypes.HWND),
+                ("rcCaret", RECT),
+            ]
+
+        user32 = ctypes_module.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return False
+        thread_id = user32.GetWindowThreadProcessId(hwnd, None)
+        if not thread_id:
+            return False
+
+        info = GUITHREADINFO()
+        info.cbSize = ctypes_module.sizeof(GUITHREADINFO)
+        if not user32.GetGUIThreadInfo(thread_id, ctypes_module.byref(info)):
+            return False
+        return bool(info.hwndCaret)
+    except Exception:
+        return False

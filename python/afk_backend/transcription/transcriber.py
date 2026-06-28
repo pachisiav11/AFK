@@ -11,6 +11,7 @@ checkpoint when present and otherwise falls back to ONNX. This keeps the rest
 of the app (app.py, UI) completely engine-agnostic.
 """
 
+import re
 import threading
 from typing import Optional
 
@@ -92,5 +93,40 @@ class Transcriber:
             return {"text": "", "latency_ms": 0, "audio_seconds": 0.0}
         self.ensure_loaded()
         result = self._backend.transcribe(audio, sample_rate=sample_rate)
+        result["text"] = clean_transcript(result.get("text", ""))
         result["engine"] = self._engine
         return result
+
+
+CHAT_TOKEN_RE = re.compile(r"<\|im_(?:start|end)\|>|<\|endoftext\|>", re.IGNORECASE)
+CHAT_ROLE_RE = re.compile(
+    r"^\s*(?:system|assistant|user)\s*(?:input)?\s*:?\s*",
+    re.IGNORECASE,
+)
+
+
+def clean_transcript(text: str) -> str:
+    """Remove model prompt/control-token leakage from ASR output."""
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+
+    if CHAT_TOKEN_RE.search(raw):
+        first = CHAT_TOKEN_RE.split(raw, maxsplit=1)[0].strip()
+        if first:
+            return _normalize_transcript(first)
+        raw = CHAT_TOKEN_RE.sub("\n", raw)
+
+    cleaned_lines = []
+    for line in re.split(r"[\r\n]+", raw):
+        candidate = CHAT_ROLE_RE.sub("", line).strip()
+        if candidate:
+            cleaned_lines.append(candidate)
+
+    return _normalize_transcript(" ".join(cleaned_lines))
+
+
+def _normalize_transcript(text: str) -> str:
+    text = CHAT_TOKEN_RE.sub("", text or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text

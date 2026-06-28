@@ -65,7 +65,7 @@ class AFKApp:
         # AFK_NO_PRELOAD lets tests skip spawning model processes.
         if not os.environ.get("AFK_NO_PRELOAD"):
             self.transcriber.preload_async()
-            self.clarifier.preload_short_async()
+            self.clarifier.preload_preferred_async()
         # Arm global hotkeys from saved settings.
         try:
             self.hotkeys.set_bindings(self.settings.get("hotkeys", {}))
@@ -152,6 +152,7 @@ class AFKApp:
         self.register("load_asr", self._load_asr)
         self.register("start_recording", self.start_recording)
         self.register("stop_recording", self.stop_recording)
+        self.register("finish_recording", self.finish_recording)
         self.register("transcribe", self.transcribe)
 
     def _load_asr(self, _params: Dict[str, Any]) -> Dict[str, Any]:
@@ -254,6 +255,15 @@ class AFKApp:
             audio = audio.mean(axis=1).astype(np.float32)
         return self.transcriber.transcribe(audio, sample_rate=int(sr))
 
+    def finish_recording(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        """Stop, transcribe, optionally clarify, then paste or copy the text."""
+        try:
+            result = self.stop_recording({})
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"stop/transcribe failed: {exc}")
+            raise
+        return self._clarify_and_insert(result)
+
     # ---- clipboard + hotkeys methods (Phase 3) ----
     def _register_clipboard_hotkeys(self) -> None:
         self.register("get_clipboard", lambda p: {"text": self.clipboard.get_text()})
@@ -285,16 +295,18 @@ class AFKApp:
         }
 
     # ---- shared dictation flow ----
-    def _paste(self, text: str) -> None:
-        """Place text on the clipboard and paste it into the focused app."""
+    def _paste(self, text: str) -> str:
+        """Paste into a text field or copy when there is nowhere to paste."""
         if not text:
-            return
+            return "empty"
         try:
             self.hotkeys.set_injecting(True)
-            self.clipboard.paste_text(text)
-            emit_event("pasted", {"chars": len(text)})
+            action = self.clipboard.paste_or_copy(text)
+            emit_event(action, {"chars": len(text)})
+            return action
         except Exception as exc:  # noqa: BLE001
             logutil.error(f"paste failed: {exc}")
+            return "error"
         finally:
             self.hotkeys.set_injecting(False)
 
@@ -311,20 +323,29 @@ class AFKApp:
         except Exception as exc:  # noqa: BLE001
             logutil.error(f"stop/transcribe failed: {exc}")
             return
+        self._clarify_and_insert(result)
+
+    def _clarify_and_insert(self, result: Dict[str, Any]) -> Dict[str, Any]:
         text = (result or {}).get("text", "")
         if not text:
-            return
+            return result or {}
         # Optionally polish the dictation with Clarify before pasting.
-        if self.settings.get("auto_clarify", True) and self.clarifier.any_available():
+        if self.settings.get("auto_clarify", False) and self.clarifier.any_available():
             threshold = self.settings.get("word_count_threshold", config.DEFAULT_WORD_THRESHOLD)
+            emit_event("clarify_started", {"source": "dictation"})
             cr = self.clarifier.clarify(text, threshold=threshold)
             self._record_clarify(cr)
             polished = cr.get("text")
             if polished:
                 text = polished
                 emit_event("transcription", {"text": text, "clarified": True})
+                result["text"] = text
+                result["clarified"] = True
         if self.settings.get("auto_paste", True):
-            self._paste(text)
+            before = text
+            result["action"] = self._paste(before)
+            result["inserted"] = True
+        return result
 
     # ---- hotkey callbacks (run on the listener thread; offload heavy work) ----
     def _hk_ptt_start(self) -> None:
@@ -360,8 +381,13 @@ class AFKApp:
     def _clarify_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
         text = params.get("text", "")
         threshold = params.get("threshold", self.settings.get("word_count_threshold"))
+        emit_event("clarify_started", {"source": "manual"})
         result = self.clarifier.clarify(text, threshold=threshold)
         self._record_clarify(result)
+        emit_event(
+            "clarify_done",
+            {"text": result.get("text", ""), "model": result.get("model"), "latency_ms": result.get("latency_ms")},
+        )
         return result
 
     def _record_clarify(self, result: Dict[str, Any]) -> None:
@@ -384,6 +410,8 @@ class AFKApp:
             logutil.warn("Clarify requested but no model available")
             emit_event("clarify_unavailable", {"reason": "No Clarify model installed"})
             return
+
+        emit_event("clarify_started", {"source": "hotkey"})
 
         # Capture selection with the listener suppressed (we synthesize Ctrl+C).
         try:

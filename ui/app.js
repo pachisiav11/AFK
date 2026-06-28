@@ -139,12 +139,13 @@ async function toggleRecord() {
 
     btn.textContent = 'Transcribing...';
     btn.disabled = true;
-    const res = await window.afk.call('stop_recording', {});
+    const res = await window.afk.call('finish_recording', {});
     isRecording = false;
     btn.classList.remove('recording');
     if (res && res.text) {
-      showTranscription(res.text, 'Copied to clipboard.');
-      await copyTranscript(res.text);
+      const action = res.action === 'pasted' ? 'Pasted.' : 'Copied to clipboard.';
+      showTranscription(res.text, action);
+      $('#recordStatus').textContent = res.action === 'pasted' ? 'Pasted' : 'Copied';
     } else if (res && res.message) {
       showTranscription('', res.message);
     }
