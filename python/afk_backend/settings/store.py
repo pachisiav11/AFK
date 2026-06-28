@@ -17,10 +17,10 @@ from .. import config, logutil
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "microphone": None,            # device name; None = system default
     "theme": "dark",
-    "startup_on_login": False,
-    "launch_minimized": False,
+    "startup_on_login": True,
+    "launch_minimized": True,
     "auto_paste": True,
-    "auto_clarify": True,
+    "auto_clarify": False,
     "word_count_threshold": config.DEFAULT_WORD_THRESHOLD,
     "logging": True,
     "developer_mode": False,
@@ -96,4 +96,9 @@ def _migrate_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     hotkeys = data.get("hotkeys") or {}
     if hotkeys.get("clarify") == "Ctrl+Shift+C":
         hotkeys["clarify"] = DEFAULT_SETTINGS["hotkeys"]["clarify"]
+    if data.get("word_count_threshold") in {42, 60}:
+        data["word_count_threshold"] = DEFAULT_SETTINGS["word_count_threshold"]
+    if data.get("auto_clarify") is True and data.get("_auto_clarify_migrated") is not True:
+        data["auto_clarify"] = DEFAULT_SETTINGS["auto_clarify"]
+        data["_auto_clarify_migrated"] = True
     return data

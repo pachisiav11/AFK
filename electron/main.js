@@ -251,6 +251,14 @@ function startBackend() {
     } else if (event === 'pasted') {
       setOverlayState('done', { label: 'Pasted' });
       hideOverlaySoon(900);
+    } else if (event === 'copied') {
+      setOverlayState('done', { label: 'Copied' });
+      hideOverlaySoon(1200);
+    } else if (event === 'clarify_started') {
+      setOverlayState('clarifying', { label: 'Clarifying', sub: 'Polishing selected text locally' });
+    } else if (event === 'clarify_unavailable') {
+      setOverlayState('done', { label: 'Clarify unavailable', sub: (data && data.reason) || 'Install local models' });
+      hideOverlaySoon(1800);
     } else if (event === 'clarify_done') {
       setOverlayState('done', { label: 'Corrected' });
       hideOverlaySoon(1200);
@@ -266,7 +274,7 @@ function registerIpc() {
   // Generic pass-through to the Python backend.
   ipcMain.handle('afk:call', async (_evt, { method, params }) => {
     if (!bridge) throw new Error('Backend not initialised');
-    const longCalls = new Set(['load_asr', 'stop_recording', 'transcribe', 'clarify']);
+    const longCalls = new Set(['load_asr', 'stop_recording', 'finish_recording', 'transcribe', 'clarify']);
     return bridge.call(method, params || {}, longCalls.has(method) ? 10 * 60 * 1000 : undefined);
   });
 

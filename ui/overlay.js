@@ -7,6 +7,7 @@ const sub = document.getElementById('sub');
 const copy = {
   recording: ['Listening', 'AFK is capturing your voice'],
   processing: ['Transcribing', 'Turning speech into text'],
+  clarifying: ['Clarifying', 'Local grammar model is polishing text'],
   done: ['Done', 'Ready']
 };
 
