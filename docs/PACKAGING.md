@@ -15,9 +15,10 @@ Config lives in the `build` field of [`package.json`](../package.json).
 |-----------|----------|---------------------|
 | Electron runtime + UI | ✅ | `resources/app.asar` |
 | Python backend **source** | ✅ | `resources/python/` |
-| llama.cpp `llama-server` (AVX2 CPU build) | ✅ | `resources/vendor/llama.cpp/` |
+| llama.cpp `llama-server` (Windows CPU x64 build) | ✅ | `resources/vendor/llama.cpp/` |
 | App icons | ✅ | bundled |
-| Python interpreter + ML deps (torch, NeMo, onnx…) | ❌ provisioned | see below |
+| Python venv + backend deps (sounddevice, onnxruntime, etc.) | ✅ | `resources/python/.venv/` |
+| Optional NeMo/PyTorch stack | ❌ provisioned | install only when using `.nemo` |
 | Model weights (Parakeet, Gemma) | ❌ downloaded | user-data `models/` |
 
 The icons are generated from a script (no binary blobs in git):
@@ -28,15 +29,17 @@ python/.venv/Scripts/python scripts/make_icons.py
 
 ## Why models and ML deps aren't bundled
 
-The full inference stack (PyTorch + NeMo + onnxruntime) is ~3 GB, and the
-models are another ~6 GB. Shipping those inside the installer would make it
-enormous. Like most local-AI desktop apps, AFK provisions them separately:
+The full optional NeMo/PyTorch stack is multi-GB, and the models are another
+~6 GB. Shipping those inside the installer would make it enormous. AFK bundles
+the lightweight Python backend venv for reliable audio/ONNX startup, while
+provisioning large optional assets separately:
 
 - **Models** download (or are placed) into the user-data `models/` directory:
   `models/parakeet-v3/` (ASR) and `models/clarify/` (Gemma GGUF). They are
   resolved at runtime by [`config.py`](../python/afk_backend/config.py) and are
   **never committed to git**.
-- **Python deps** install into `python/.venv` via `npm run setup:python`.
+- **Python deps** install into `python/.venv` via `npm run setup:python` and
+  are bundled into packaged builds.
 
 ### Path resolution (dev vs. packaged)
 
@@ -63,8 +66,8 @@ machine, bundle the Python runtime as well. Two supported approaches:
    CPython and run `setup-python` on first launch. Smaller installer, requires
    network on first run.
 
-Without either, the packaged app falls back to a system `py -3.11`
-(see `python-locator.js`) — fine for developer machines, not for end users.
+The packaged app prefers `resources/python/.venv` and only falls back to a
+system Python 3.11/3.12 if a custom build omits the bundled venv.
 
 ## No console windows
 

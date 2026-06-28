@@ -43,5 +43,6 @@ contextBridge.exposeInMainWorld('afk', {
   // Event subscriptions
   onBackendStatus: (cb) => on('backend:status', cb),
   onBackendEvent: (cb) => on('backend:event', cb),
+  onOverlayState: (cb) => on('overlay:state', cb),
   off
 });

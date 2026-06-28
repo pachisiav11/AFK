@@ -66,9 +66,7 @@ class OnnxParakeet:
 
                 t0 = time.time()
                 local_dir = config.local_asr_dir()
-                use_local = local_dir.exists() and all(
-                    (local_dir / f).exists() for f in config.LOCAL_ASR_REQUIRED
-                )
+                use_local = _has_local_model_files(local_dir)
                 if use_local:
                     logutil.info(
                         f"Loading ASR model from local dir '{local_dir}' "
@@ -130,3 +128,8 @@ class OnnxParakeet:
             "latency_ms": latency_ms,
             "audio_seconds": round(audio_seconds, 2),
         }
+
+
+def _has_local_model_files(local_dir) -> bool:
+    """Return true when a local onnx-asr Parakeet folder is complete enough."""
+    return local_dir.exists() and all((local_dir / f).exists() for f in config.LOCAL_ASR_REQUIRED)

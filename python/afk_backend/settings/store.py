@@ -27,7 +27,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "hotkeys": {
         "push_to_talk": "Ctrl+Space",       # held to record
         "toggle": "Ctrl+Shift+Space",        # toggle recording
-        "clarify": "Ctrl+Shift+C",           # clarify selection/clipboard
+        "clarify": "Ctrl+Alt+K",             # clarify selection/clipboard
     },
     "noise_suppression": True,
     "auto_gain": True,
@@ -48,6 +48,7 @@ class SettingsStore:
                 with open(self._path, "r", encoding="utf-8") as fh:
                     user = json.load(fh)
                 data = _deep_merge(data, user)
+                data = _migrate_settings(data)
             except Exception as exc:  # noqa: BLE001
                 logutil.warn(f"Failed to read settings, using defaults: {exc}")
         return data
@@ -89,3 +90,10 @@ def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
         else:
             out[k] = deepcopy(v)
     return out
+
+
+def _migrate_settings(data: Dict[str, Any]) -> Dict[str, Any]:
+    hotkeys = data.get("hotkeys") or {}
+    if hotkeys.get("clarify") == "Ctrl+Shift+C":
+        hotkeys["clarify"] = DEFAULT_SETTINGS["hotkeys"]["clarify"]
+    return data

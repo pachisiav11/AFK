@@ -8,7 +8,7 @@ possible latency on the dictation hot path.
 Matching uses *exact* modifier sets so overlapping combos disambiguate:
   Ctrl+Space          -> push-to-talk   (Ctrl only)
   Ctrl+Shift+Space    -> toggle         (Ctrl+Shift)
-  Ctrl+Shift+C        -> clarify        (Ctrl+Shift)
+  Ctrl+Alt+K          -> clarify        (Ctrl+Alt)
 
 Heavy work (recording/transcription/paste) must be dispatched off the listener
 thread by the callbacks; this class only detects and routes events.
@@ -38,7 +38,7 @@ Combo = Tuple[FrozenSet[str], str]
 
 
 def parse_combo(combo: str) -> Optional[Combo]:
-    """Parse 'Ctrl+Shift+C' -> (frozenset({'ctrl','shift'}), 'c')."""
+    """Parse 'Ctrl+Alt+K' -> (frozenset({'ctrl','alt'}), 'k')."""
     if not combo:
         return None
     mods = set()
@@ -108,7 +108,7 @@ class HotkeyManager:
         for action, default in (
             ("push_to_talk", "ctrl+space"),
             ("toggle", "ctrl+shift+space"),
-            ("clarify", "ctrl+shift+c"),
+            ("clarify", "ctrl+alt+k"),
         ):
             parsed = parse_combo(hotkeys.get(action, default))
             if parsed:

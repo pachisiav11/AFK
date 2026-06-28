@@ -5,7 +5,7 @@
  * Run via:  npm run setup:python
  *
  * Strategy:
- *   1. Find a Python 3.11 interpreter (py -3.11 on Windows, else python3.11).
+ *   1. Find a Python 3.11/3.12 interpreter.
  *   2. Create python/.venv if missing.
  *   3. Upgrade pip and install python/requirements.txt.
  *
@@ -43,7 +43,7 @@ function findBasePython() {
       return { cmd, pre };
     }
   }
-  throw new Error('No suitable Python (3.11/3.12) found. Install Python 3.11.');
+  throw new Error('No suitable Python (3.11/3.12) found. Install Python 3.11 or 3.12.');
 }
 
 function main() {

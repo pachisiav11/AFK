@@ -12,6 +12,7 @@ selection-capture so dictation never clobbers what they had copied.
 
 import threading
 import time
+import uuid
 from typing import Optional
 
 try:
@@ -99,17 +100,20 @@ class Clipboard:
         Returns '' if nothing is selected (clipboard unchanged by the copy).
         """
         prior = self.get_text()
-        # Sentinel trick: if copy yields the same value and nothing was
-        # selected, we still return prior — callers fall back to clipboard.
-        self._copy()
-        time.sleep(_CLIPBOARD_SETTLE)
-        selected = self.get_text()
-        # Restore the user's original clipboard contents.
+        sentinel = f"__AFK_NO_SELECTION_{uuid.uuid4().hex}__"
         try:
-            self.set_text(prior)
-        except Exception:
-            pass
-        return selected
+            self.set_text(sentinel)
+            time.sleep(_CLIPBOARD_SETTLE)
+            self._copy()
+            time.sleep(_CLIPBOARD_SETTLE)
+            selected = self.get_text()
+        finally:
+            # Restore the user's original clipboard contents.
+            try:
+                self.set_text(prior)
+            except Exception:
+                pass
+        return "" if selected == sentinel else selected
 
     def replace_selection(self, text: str) -> bool:
         """Replace the currently selected text by pasting over it."""

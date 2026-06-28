@@ -9,142 +9,157 @@
 </head>
 <body>
   <div class="app">
-    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">A</div>
         <div class="brand-text">
           <span class="brand-name">AFK</span>
-          <span class="brand-sub">local speech-to-text</span>
+          <span class="brand-sub">local dictation</span>
         </div>
       </div>
 
       <nav class="nav">
-        <button class="nav-item active" data-page="home">
-          <span class="nav-icon">●</span><span>Home</span>
+        <button class="nav-item active" data-page="home" aria-label="Home">
+          <span class="nav-icon home-icon">&#8962;</span><span>Home</span>
         </button>
-        <button class="nav-item" data-page="statistics">
-          <span class="nav-icon">▮</span><span>Statistics</span>
+        <button class="nav-item" data-page="statistics" aria-label="Statistics">
+          <span class="nav-icon">&#9638;</span><span>Statistics</span>
         </button>
-        <button class="nav-item" data-page="settings">
-          <span class="nav-icon">⚙</span><span>Settings</span>
+        <button class="nav-item" data-page="settings" aria-label="Settings">
+          <span class="nav-icon">&#9881;</span><span>Settings</span>
         </button>
-        <button class="nav-item" data-page="about">
-          <span class="nav-icon">ⓘ</span><span>About</span>
+        <button class="nav-item" data-page="about" aria-label="About">
+          <span class="nav-icon">i</span><span>About</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
         <div class="backend-status" id="backendStatus">
           <span class="dot dot-pending" id="backendDot"></span>
-          <span id="backendLabel">Starting backend…</span>
+          <span id="backendLabel">Starting backend...</span>
         </div>
       </div>
     </aside>
 
-    <!-- Main content -->
     <main class="content">
-      <!-- HOME -->
       <section class="page active" id="page-home">
         <header class="page-head">
-          <h1>Home</h1>
-          <p class="page-sub">Press your hotkey and speak. AFK does the rest.</p>
+          <div>
+            <h1>Dictation</h1>
+            <p class="page-sub">Local speech, cleanup, and paste in one focused console.</p>
+          </div>
+          <div class="head-status">
+            <span class="status-pill" id="asrStatus">Model: ...</span>
+            <span class="status-pill" id="clarifyModels">Clarify: ...</span>
+          </div>
         </header>
 
         <div class="home-grid">
-          <div class="card record-card">
+          <section class="card record-card" aria-labelledby="recordTitle">
             <div class="record-state" id="recordState">
-              <div class="record-orb" id="recordOrb"></div>
+              <div class="record-orb" id="recordOrb" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
               <div class="record-text">
+                <span class="section-kicker" id="recordTitle">Voice input</span>
                 <span class="record-status" id="recordStatus">Idle</span>
                 <span class="record-timer" id="recordTimer">00:00</span>
               </div>
             </div>
+
             <div class="transcription" id="transcription">
-              <span class="placeholder">Your transcription will appear here…</span>
+              <span class="placeholder">Your transcription will appear here...</span>
             </div>
+
             <div class="record-actions">
               <button class="btn btn-primary" id="recordBtn">Start recording</button>
-              <span class="asr-status" id="asrStatus">Model: …</span>
+              <button class="btn btn-quiet" id="loadAsrBtn">Load speech model</button>
             </div>
-          </div>
+          </section>
 
-          <div class="card info-card">
+          <section class="card info-card" aria-label="Current setup">
             <div class="info-row">
               <span class="info-label">Microphone</span>
               <select class="mic-select" id="micSelect"><option value="">System default</option></select>
             </div>
             <div class="info-row">
               <span class="info-label">Active model</span>
-              <span class="info-value" id="activeModel">—</span>
+              <span class="info-value" id="activeModel">-</span>
             </div>
             <div class="info-row">
               <span class="info-label">Push-to-talk</span>
-              <span class="info-value" id="pttHotkey">—</span>
+              <span class="info-value keycap" id="pttHotkey">-</span>
             </div>
             <div class="info-row">
               <span class="info-label">Toggle</span>
-              <span class="info-value" id="toggleHotkey">—</span>
+              <span class="info-value keycap" id="toggleHotkey">-</span>
             </div>
             <div class="info-row">
               <span class="info-label">Clarify</span>
-              <span class="info-value" id="clarifyHotkey">—</span>
+              <span class="info-value keycap" id="clarifyHotkey">-</span>
             </div>
-          </div>
+          </section>
 
-          <div class="card clarify-card">
-            <div class="card-title">Clarify <span class="asr-status" id="clarifyModels">…</span></div>
-            <textarea id="clarifyInput" class="clarify-input" rows="3" placeholder="Type or paste text to polish…"></textarea>
+          <section class="card clarify-card" aria-labelledby="clarifyTitle">
+            <div class="card-title" id="clarifyTitle">
+              <span>Clarify</span>
+              <span class="status-pill" id="clarifyMeta"></span>
+            </div>
+            <textarea id="clarifyInput" class="clarify-input" rows="3" placeholder="Type or paste text to polish..."></textarea>
             <div class="record-actions">
               <button class="btn" id="clarifyBtn">Clarify</button>
-              <span class="asr-status" id="clarifyMeta"></span>
             </div>
-            <div class="transcription clarify-output" id="clarifyOutput"><span class="placeholder">Polished text appears here…</span></div>
-          </div>
+            <div class="transcription clarify-output" id="clarifyOutput">
+              <span class="placeholder">Polished text appears here...</span>
+            </div>
+          </section>
         </div>
       </section>
 
-      <!-- STATISTICS -->
       <section class="page" id="page-statistics">
         <header class="page-head">
-          <h1>Statistics</h1>
-          <p class="page-sub">Everything tracked locally on this device.</p>
+          <div>
+            <h1>Statistics</h1>
+            <p class="page-sub">Everything stays on this device.</p>
+          </div>
         </header>
-        <div class="stats-grid" id="statsGrid">
-          <div class="empty-hint">Statistics will populate as you dictate. (Phase 5)</div>
+        <div class="stats-stack" id="statsGrid">
+          <div class="empty-hint">Statistics will populate as you dictate.</div>
         </div>
       </section>
 
-      <!-- SETTINGS -->
       <section class="page" id="page-settings">
         <header class="page-head">
-          <h1>Settings</h1>
-          <p class="page-sub">Tune AFK to your workflow.</p>
+          <div>
+            <h1>Settings</h1>
+            <p class="page-sub">Tune AFK to your workflow.</p>
+          </div>
         </header>
         <div class="settings-list" id="settingsList">
-          <div class="empty-hint">Settings will be available in Phase 5.</div>
+          <div class="empty-hint">Settings unavailable while the backend starts.</div>
         </div>
       </section>
 
-      <!-- ABOUT -->
       <section class="page" id="page-about">
         <header class="page-head">
-          <h1>About</h1>
-          <p class="page-sub">Privacy-first. Fully local. No cloud.</p>
+          <div>
+            <h1>About</h1>
+            <p class="page-sub">Privacy-first, fully local speech tools.</p>
+          </div>
         </header>
-        <div class="card about-card">
-          <div class="info-row"><span class="info-label">Version</span><span class="info-value" id="aboutVersion">—</span></div>
-          <div class="info-row"><span class="info-label">Electron</span><span class="info-value" id="aboutElectron">—</span></div>
-          <div class="info-row"><span class="info-label">Node</span><span class="info-value" id="aboutNode">—</span></div>
-          <div class="info-row"><span class="info-label">Backend</span><span class="info-value" id="aboutBackend">—</span></div>
-          <div class="info-row"><span class="info-label">Models</span><span class="info-value" id="aboutModels">—</span></div>
+        <section class="card about-card" aria-label="About AFK">
+          <div class="info-row"><span class="info-label">Version</span><span class="info-value" id="aboutVersion">-</span></div>
+          <div class="info-row"><span class="info-label">Electron</span><span class="info-value" id="aboutElectron">-</span></div>
+          <div class="info-row"><span class="info-label">Node</span><span class="info-value" id="aboutNode">-</span></div>
+          <div class="info-row"><span class="info-label">Backend</span><span class="info-value" id="aboutBackend">-</span></div>
+          <div class="info-row"><span class="info-label">Models</span><span class="info-value" id="aboutModels">-</span></div>
           <div class="info-row"><span class="info-label">License</span><span class="info-value">MIT</span></div>
           <div class="about-credits">
             <p>Speech recognition: <strong>Parakeet 0.6B v3</strong></p>
-            <p>Clarify (short): <strong>Gemma 3 270M IT</strong></p>
-            <p>Clarify (long): <strong>Gemma 4 E2B</strong></p>
+            <p>Clarify short: <strong>Gemma 3 270M</strong></p>
+            <p>Clarify long: <strong>Gemma 4 E2B IT</strong></p>
           </div>
-        </div>
+        </section>
       </section>
     </main>
   </div>
