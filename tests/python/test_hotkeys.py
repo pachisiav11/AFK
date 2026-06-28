@@ -18,12 +18,13 @@ CTRL = keyboard.Key.ctrl_l
 SHIFT = keyboard.Key.shift
 SPACE = keyboard.Key.space
 C = keyboard.KeyCode(vk=67)  # 'C'
+K = keyboard.KeyCode(vk=75)  # 'K'
 
 
 class TestParse(unittest.TestCase):
     def test_parse_basic(self):
         self.assertEqual(parse_combo("Ctrl+Space"), (frozenset({"ctrl"}), "space"))
-        self.assertEqual(parse_combo("Ctrl+Shift+C"), (frozenset({"ctrl", "shift"}), "c"))
+        self.assertEqual(parse_combo("Ctrl+Alt+K"), (frozenset({"ctrl", "alt"}), "k"))
         self.assertEqual(parse_combo("Alt+Win+K"), (frozenset({"alt", "win"}), "k"))
 
     def test_parse_aliases(self):
@@ -50,7 +51,7 @@ class TestManager(unittest.TestCase):
             {
                 "push_to_talk": "ctrl+space",
                 "toggle": "ctrl+shift+space",
-                "clarify": "ctrl+shift+c",
+                "clarify": "ctrl+alt+k",
             }
         )
 
@@ -88,8 +89,8 @@ class TestManager(unittest.TestCase):
 
     def test_clarify(self):
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(SHIFT)
-        self.mgr._on_press(C)
+        self.mgr._on_press(keyboard.Key.alt_l)
+        self.mgr._on_press(K)
         self.assertEqual(self.events, ["clarify"])
 
     def test_injecting_suppresses_events(self):

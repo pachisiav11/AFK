@@ -67,7 +67,7 @@ async function refreshBackendInfo() {
     const info = await window.afk.call('get_info', {});
     $('#aboutBackend').textContent = `${info.backend} (py ${info.python})`;
     $('#aboutModels').textContent = info.models_status || 'not loaded';
-    $('#activeModel').textContent = info.default_model || '-';
+    $('#activeModel').textContent = 'Parakeet + Gemma';
   } catch (e) {
     setBackendStatus(false);
   }
@@ -142,7 +142,12 @@ async function toggleRecord() {
     const res = await window.afk.call('stop_recording', {});
     isRecording = false;
     btn.classList.remove('recording');
-    if (res && (res.text || res.message)) showTranscription(res.text, res.message);
+    if (res && res.text) {
+      showTranscription(res.text, 'Copied to clipboard.');
+      await copyTranscript(res.text);
+    } else if (res && res.message) {
+      showTranscription('', res.message);
+    }
   } catch (e) {
     isRecording = false;
     btn.classList.remove('recording');
@@ -206,11 +211,11 @@ async function refreshHotkeys() {
     const hk = cfg.hotkeys || {};
     $('#pttHotkey').textContent = hk.push_to_talk || 'Ctrl+Space';
     $('#toggleHotkey').textContent = hk.toggle || 'Ctrl+Shift+Space';
-    $('#clarifyHotkey').textContent = hk.clarify || 'Ctrl+Shift+C';
+    $('#clarifyHotkey').textContent = hk.clarify || 'Ctrl+Alt+K';
   } catch (e) {
     $('#pttHotkey').textContent = 'Ctrl+Space';
     $('#toggleHotkey').textContent = 'Ctrl+Shift+Space';
-    $('#clarifyHotkey').textContent = 'Ctrl+Shift+C';
+    $('#clarifyHotkey').textContent = 'Ctrl+Alt+K';
   }
 }
 
@@ -275,7 +280,7 @@ function eventMatchesCombo(event, combo) {
 
 function configuredHotkeys() {
   const hk = (_settingsCache && _settingsCache.hotkeys) || {};
-  return [hk.push_to_talk || 'Ctrl+Space', hk.toggle || 'Ctrl+Shift+Space', hk.clarify || 'Ctrl+Shift+C'];
+  return [hk.push_to_talk || 'Ctrl+Space', hk.toggle || 'Ctrl+Shift+Space', hk.clarify || 'Ctrl+Alt+K'];
 }
 
 function initEditableHotkeyHandling() {
@@ -335,31 +340,37 @@ async function refreshStatistics() {
     const s = await window.afk.call('get_statistics', {});
     const todaySaved = (s.words.today / (s.typing_wpm_assumed || 40));
     grid.innerHTML =
-      `<div class="stats-section-title">Words spoken</div>
-       <div class="stats-grid">
-         ${statCard(s.words.today.toLocaleString(), 'Today', true)}
-         ${statCard(s.words.week.toLocaleString(), 'This week')}
-         ${statCard(s.words.month.toLocaleString(), 'This month')}
-         ${statCard(s.words.lifetime.toLocaleString(), 'All time')}
-       </div>
-       <div class="stats-section-title">Productivity</div>
-       <div class="stats-grid">
-         ${statCard(s.wpm_avg, 'Average words/min', true)}
-         ${statCard(fmtDuration(todaySaved * 60), 'Typing time saved today')}
-         ${statCard(fmtDuration(s.typing_minutes_saved * 60), 'Typing time saved total', true)}
-         ${statCard(s.streak_current, 'Current streak days')}
-         ${statCard(s.streak_longest, 'Longest streak days')}
-       </div>
-       <div class="stats-section-title">Recordings and latency</div>
-       <div class="stats-grid">
-         ${statCard(s.recordings.toLocaleString(), 'Total recordings')}
-         ${statCard(fmtDuration(s.longest_recording_sec), 'Longest recording')}
-         ${statCard(fmtDuration(s.avg_recording_sec), 'Average recording')}
-         ${statCard(fmtDuration(s.total_transcription_sec), 'Total transcription time')}
-         ${statCard(`${s.avg_transcription_latency_ms} ms`, 'Average transcription latency')}
-         ${statCard(s.clarifications.toLocaleString(), 'Clarify requests')}
-         ${statCard(`${s.avg_clarify_latency_ms || 0} ms`, 'Average Clarify latency')}
-       </div>`;
+      `<section class="stats-section">
+        <div class="stats-section-title">Words spoken</div>
+        <div class="stats-grid">
+          ${statCard(s.words.today.toLocaleString(), 'Today', true)}
+          ${statCard(s.words.week.toLocaleString(), 'This week')}
+          ${statCard(s.words.month.toLocaleString(), 'This month')}
+          ${statCard(s.words.lifetime.toLocaleString(), 'All time')}
+        </div>
+      </section>
+      <section class="stats-section">
+        <div class="stats-section-title">Productivity</div>
+        <div class="stats-grid">
+          ${statCard(s.wpm_avg, 'Average words/min', true)}
+          ${statCard(fmtDuration(todaySaved * 60), 'Typing time saved today')}
+          ${statCard(fmtDuration(s.typing_minutes_saved * 60), 'Typing time saved total', true)}
+          ${statCard(s.streak_current, 'Current streak days')}
+          ${statCard(s.streak_longest, 'Longest streak days')}
+        </div>
+      </section>
+      <section class="stats-section">
+        <div class="stats-section-title">Recordings and latency</div>
+        <div class="stats-grid">
+          ${statCard(s.recordings.toLocaleString(), 'Total recordings')}
+          ${statCard(fmtDuration(s.longest_recording_sec), 'Longest recording')}
+          ${statCard(fmtDuration(s.avg_recording_sec), 'Average recording')}
+          ${statCard(fmtDuration(s.total_transcription_sec), 'Total transcription time')}
+          ${statCard(`${s.avg_transcription_latency_ms} ms`, 'Average transcription latency')}
+          ${statCard(s.clarifications.toLocaleString(), 'Clarify requests')}
+          ${statCard(`${s.avg_clarify_latency_ms || 0} ms`, 'Average Clarify latency')}
+        </div>
+      </section>`;
   } catch (e) {
     grid.innerHTML = '<div class="empty-hint">Statistics unavailable while the backend starts.</div>';
   }
@@ -543,9 +554,20 @@ function setRecording(on) {
   }
 }
 
+async function copyTranscript(text) {
+  if (!text) return;
+  try {
+    await window.afk.call('set_clipboard', { text });
+    $('#recordStatus').textContent = 'Copied';
+  } catch (e) {
+    $('#recordStatus').textContent = 'Idle';
+  }
+}
+
 function showTranscription(text, message) {
   const el = $('#transcription');
-  if (text) el.textContent = text;
+  if (text && message) el.textContent = `${text}\n\n${message}`;
+  else if (text) el.textContent = text;
   else if (message) el.textContent = message;
 }
 
