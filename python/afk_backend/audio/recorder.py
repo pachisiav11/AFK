@@ -26,6 +26,8 @@ from .. import logutil
 
 TARGET_SR = 16000
 BLOCKSIZE = 1024  # ~64 ms at 16 kHz; small for responsive stop
+MIN_SIGNAL_RMS = 0.00015
+MIN_SIGNAL_PEAK = 0.001
 
 
 class AudioUnavailable(RuntimeError):
@@ -213,6 +215,24 @@ def process(
             x = x * min(0.97 / peak, 8.0)  # cap gain to avoid blowing up noise
 
     return np.clip(x, -1.0, 1.0).astype(np.float32)
+
+
+def levels(audio: np.ndarray) -> dict:
+    """Return simple amplitude diagnostics for a mono float waveform."""
+    if audio is None or audio.size == 0:
+        return {"rms": 0.0, "peak": 0.0, "samples": 0}
+    x = np.asarray(audio, dtype=np.float32)
+    return {
+        "rms": float(np.sqrt(np.mean(x * x))),
+        "peak": float(np.max(np.abs(x))),
+        "samples": int(x.size),
+    }
+
+
+def signal_too_quiet(audio: np.ndarray) -> bool:
+    """True when the input is effectively digital silence for dictation."""
+    lv = levels(audio)
+    return lv["rms"] < MIN_SIGNAL_RMS and lv["peak"] < MIN_SIGNAL_PEAK
 
 
 def _trim_silence(x: np.ndarray, sr: int, thresh: float = 0.012, pad_ms: int = 80) -> np.ndarray:

@@ -9,7 +9,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "python"))
 
-from afk_backend.audio.recorder import _resample, _trim_silence, process  # noqa: E402
+from afk_backend.audio.recorder import _resample, _trim_silence, levels, process, signal_too_quiet  # noqa: E402
 
 
 class TestDsp(unittest.TestCase):
@@ -45,6 +45,15 @@ class TestDsp(unittest.TestCase):
     def test_process_empty(self):
         out = process(np.zeros(0, dtype=np.float32))
         self.assertEqual(len(out), 0)
+
+    def test_levels_and_quiet_signal_detection(self):
+        quiet = np.ones(16000, dtype=np.float32) * 0.00001
+        loud = np.ones(16000, dtype=np.float32) * 0.01
+
+        self.assertTrue(signal_too_quiet(quiet))
+        self.assertFalse(signal_too_quiet(loud))
+        self.assertEqual(levels(quiet)["samples"], 16000)
+        self.assertGreater(levels(loud)["peak"], levels(quiet)["peak"])
 
 
 if __name__ == "__main__":

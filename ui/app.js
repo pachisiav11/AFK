@@ -142,7 +142,7 @@ async function toggleRecord() {
     const res = await window.afk.call('stop_recording', {});
     isRecording = false;
     btn.classList.remove('recording');
-    if (res && res.text) showTranscription(res.text);
+    if (res && (res.text || res.message)) showTranscription(res.text, res.message);
   } catch (e) {
     isRecording = false;
     btn.classList.remove('recording');
@@ -496,7 +496,7 @@ function initEvents() {
         $('#recordStatus').textContent = 'Transcribing...';
         break;
       case 'transcription':
-        showTranscription(data && data.text);
+        showTranscription(data && data.text, data && data.message);
         $('#recordStatus').textContent = 'Idle';
         refreshAsrStatus();
         break;
@@ -543,9 +543,10 @@ function setRecording(on) {
   }
 }
 
-function showTranscription(text) {
+function showTranscription(text, message) {
   const el = $('#transcription');
   if (text) el.textContent = text;
+  else if (message) el.textContent = message;
 }
 
 // ---------- Boot ----------

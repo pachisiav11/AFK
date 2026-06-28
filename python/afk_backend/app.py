@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict
 from . import config, logutil, __version__
 from .rpc import emit_event, RpcError
 from .settings import SettingsStore
-from .audio.recorder import Recorder, process as process_audio
+from .audio.recorder import Recorder, levels as audio_levels, process as process_audio, signal_too_quiet
 from .transcription.transcriber import Transcriber
 from .clipboard.clipboard import Clipboard
 from .hotkeys import HotkeyManager
@@ -175,8 +175,24 @@ class AFKApp:
 
         audio = captured["audio"]
         if audio is None or len(audio) == 0:
-            emit_event("transcription", {"text": ""})
-            return {"text": "", "duration": captured["duration"], "latency_ms": 0}
+            result = _empty_transcription(captured["duration"], "empty_audio")
+            emit_event("transcription", result)
+            return result
+
+        raw_levels = audio_levels(audio)
+        if signal_too_quiet(audio):
+            logutil.warn(
+                "Microphone signal too quiet "
+                f"(rms={raw_levels['rms']:.7f}, peak={raw_levels['peak']:.7f})"
+            )
+            result = _empty_transcription(
+                captured["duration"],
+                "low_signal",
+                "Microphone signal is too quiet. Check Windows input volume or choose another mic.",
+                raw_levels=raw_levels,
+            )
+            emit_event("transcription", result)
+            return result
 
         s = self.settings.all()
         audio = process_audio(
@@ -186,9 +202,24 @@ class AFKApp:
             auto_gain=s.get("auto_gain", True),
             silence_trim=s.get("silence_trim", True),
         )
+        processed_levels = audio_levels(audio)
 
         result = self.transcriber.transcribe(audio, sample_rate=captured["sr"])
         result["duration"] = round(captured["duration"], 2)
+        result["raw_levels"] = raw_levels
+        result["processed_levels"] = processed_levels
+        if _silence_hallucination(result.get("text", ""), raw_levels):
+            logutil.warn(
+                "Suppressing likely silence hallucination "
+                f"'{result.get('text')}' (rms={raw_levels['rms']:.7f}, peak={raw_levels['peak']:.7f})"
+            )
+            result.update(
+                {
+                    "text": "",
+                    "reason": "low_signal",
+                    "message": "Microphone signal is too quiet. Check Windows input volume or choose another mic.",
+                }
+            )
         # Record usage stats (words dictated, recording length, transcription latency).
         try:
             words = len((result.get("text") or "").split())
@@ -196,7 +227,17 @@ class AFKApp:
             emit_event("statistics_updated", {})
         except Exception as exc:  # noqa: BLE001
             logutil.warn(f"stats record failed: {exc}")
-        emit_event("transcription", {"text": result["text"], "latency_ms": result["latency_ms"]})
+        emit_event(
+            "transcription",
+            {
+                "text": result.get("text", ""),
+                "latency_ms": result.get("latency_ms", 0),
+                "reason": result.get("reason"),
+                "message": result.get("message"),
+                "raw_levels": result.get("raw_levels"),
+                "processed_levels": result.get("processed_levels"),
+            },
+        )
         return result
 
     def transcribe(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -377,3 +418,24 @@ class AFKApp:
             "clarify_done",
             {"text": out, "model": result.get("model"), "latency_ms": result.get("latency_ms")},
         )
+
+
+def _empty_transcription(duration: float, reason: str, message: str = "", **extra) -> Dict[str, Any]:
+    return {
+        "text": "",
+        "duration": round(duration, 2),
+        "latency_ms": 0,
+        "reason": reason,
+        "message": message,
+        **extra,
+    }
+
+
+def _silence_hallucination(text: str, raw_levels: Dict[str, Any]) -> bool:
+    token = (text or "").strip().lower().strip(".!? ")
+    if token not in {"yeah", "yea", "yes", "yep", "ok", "okay", "uh", "um", "hmm"}:
+        return False
+    return (
+        float(raw_levels.get("rms", 0.0)) < 0.0008
+        and float(raw_levels.get("peak", 0.0)) < 0.006
+    )
