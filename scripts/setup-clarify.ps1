@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Python = Join-Path $RepoRoot "python\.venv\Scripts\python.exe"
-$HfCli = Join-Path $RepoRoot "python\.venv\Scripts\huggingface-cli.exe"
+$HfCli = Join-Path $RepoRoot "python\.venv\Scripts\hf.exe"
 $ClarifyDir = Join-Path $RepoRoot "models\clarify"
 $LlamaDir = Join-Path $RepoRoot "vendor\llama.cpp"
 $LlamaBinDir = Join-Path $LlamaDir "llama-bin"
@@ -22,13 +22,13 @@ New-Item -ItemType Directory -Force -Path $LlamaDir | Out-Null
 & $Python -m pip install -U huggingface_hub
 
 if (!(Test-Path $HfCli)) {
-  throw "huggingface-cli.exe was not installed into the Python venv."
+  throw "hf.exe was not installed into the Python venv."
 }
 
 if (!$SkipModels) {
   Write-Host "Downloading official GGUF Clarify models..."
-  & $HfCli download ggml-org/gemma-3-270m-GGUF gemma-3-270m-Q8_0.gguf --local-dir $ClarifyDir
-  & $HfCli download ggml-org/gemma-4-E2B-it-GGUF gemma-4-E2B-it-Q8_0.gguf --local-dir $ClarifyDir
+  & $HfCli download ggml-org/gemma-3-270m-GGUF --include gemma-3-270m-Q8_0.gguf --local-dir $ClarifyDir
+  & $HfCli download ggml-org/gemma-4-E2B-it-GGUF --include gemma-4-E2B-it-Q8_0.gguf --local-dir $ClarifyDir
 }
 
 if (!$SkipLlama) {

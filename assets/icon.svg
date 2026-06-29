@@ -1,15 +1,25 @@
-<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AFK">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6c8cff"/>
-      <stop offset="1" stop-color="#9b6cff"/>
+    <linearGradient id="panel" x1="72" y1="24" x2="456" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101b1c"/>
+      <stop offset="1" stop-color="#0d1114"/>
+    </linearGradient>
+    <linearGradient id="green" x1="140" y1="96" x2="384" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#45f18b"/>
+      <stop offset="1" stop-color="#12a772"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="148" y1="356" x2="362" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd64d"/>
+      <stop offset="1" stop-color="#ff9e16"/>
     </linearGradient>
   </defs>
-  <rect width="256" height="256" rx="56" fill="#0f1115"/>
-  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#g)" opacity="0.12"/>
-  <!-- microphone -->
-  <rect x="108" y="56" width="40" height="84" rx="20" fill="url(#g)"/>
-  <path d="M84 124a44 44 0 0 0 88 0" fill="none" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
-  <line x1="128" y1="168" x2="128" y2="196" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
-  <line x1="100" y1="200" x2="156" y2="200" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
+  <rect x="12" y="12" width="488" height="488" rx="92" fill="url(#panel)" stroke="#426a60" stroke-width="6"/>
+  <path fill="url(#green)" d="M230 96h52c9 0 17 5 21 13l139 306c5 11-3 24-16 24h-50c-7 0-14-4-17-11L256 198 153 428c-3 7-10 11-17 11H86c-13 0-21-13-16-24l139-306c4-8 12-13 21-13Z"/>
+  <rect x="239" y="205" width="34" height="226" rx="17" fill="#51e96a"/>
+  <rect x="197" y="273" width="30" height="126" rx="15" fill="#23c982"/>
+  <rect x="285" y="273" width="30" height="126" rx="15" fill="#23c982"/>
+  <rect x="158" y="324" width="28" height="68" rx="14" fill="#6a96a0"/>
+  <rect x="326" y="324" width="28" height="68" rx="14" fill="#6a96a0"/>
+  <path fill="url(#amber)" d="M139 396c3-9 11-15 20-15h44c7 0 12 7 9 14l-19 45h-70l16-44Z"/>
+  <path fill="url(#amber)" d="M309 395c-3-7 2-14 9-14h44c9 0 17 6 20 15l16 44h-70l-19-45Z"/>
 </svg>

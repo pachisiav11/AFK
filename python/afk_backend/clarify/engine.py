@@ -17,6 +17,7 @@ never invents content.
 """
 
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -95,7 +96,7 @@ class ClarifyModel:
 
     def clarify(self, text: str) -> str:
         self.ensure_loaded()
-        max_tokens = min(self.n_ctx - 256, max(64, int(len(text.split()) * 3) + 64))
+        max_tokens = min(256, self.n_ctx - 256, max(48, int(len(text.split()) * 2.2) + 40))
         corrected = self._server.chat(
             messages=self._build_messages(text),
             temperature=0.0,
@@ -114,7 +115,7 @@ class ClarifyEngine:
         self.short = ClarifyModel(
             config.GEMMA_SHORT_MODEL, config.clarify_short_path(), n_ctx=2048, fewshot=True
         )
-        self.long = ClarifyModel(config.GEMMA_LONG_MODEL, config.clarify_long_path(), n_ctx=4096)
+        self.long = ClarifyModel(config.GEMMA_LONG_MODEL, config.clarify_long_path(), n_ctx=2048)
 
     # ---- status ----
     def status(self) -> dict:
@@ -138,6 +139,25 @@ class ClarifyEngine:
                 pass
 
         threading.Thread(target=_run, name="clarify-preload", daemon=True).start()
+
+    def preload_long_async(self) -> None:
+        if not self.long.available:
+            return
+
+        def _run():
+            try:
+                self.long.ensure_loaded()
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, name="clarify-preload-long", daemon=True).start()
+
+    def preload_preferred_async(self) -> None:
+        """Eagerly load both Clarify models at startup so routing never has
+        to lazy-load mid-request (short is small/fast; long is preloaded
+        too since it's the default for most dictation lengths)."""
+        self.preload_short_async()
+        self.preload_long_async()
 
     def shutdown(self) -> None:
         for m in (self.short, self.long):
@@ -189,9 +209,22 @@ class ClarifyEngine:
 def _clean_correction(text: str) -> str:
     """Keep hotkey grammar output paste-ready across model families."""
     text = (text or "").strip()
+    if not text:
+        return ""
+    text = re.split(r"<\|im_(?:start|end)\|>|<\|endoftext\|>", text, maxsplit=1, flags=re.I)[
+        0
+    ].strip()
     if text.startswith("```"):
         lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
         text = "\n".join(lines).strip()
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"^\s*(?:assistant|user|system)\s*:?\s*", "", line, flags=re.I).strip()
+        if line.lower().startswith("input:"):
+            break
+        if line:
+            lines.append(line)
+    text = " ".join(lines).strip()
     for prefix in ("Corrected text:", "Correction:", "Output:", "Answer:"):
         if text.lower().startswith(prefix.lower()):
             text = text[len(prefix):].strip()

@@ -42,6 +42,8 @@ body {
   backdrop-filter: blur(22px) saturate(140%);
   transform: translateY(0);
   opacity: 1;
+  position: relative;
+  overflow: hidden;
 }
 
 .status-dot {
@@ -114,6 +116,51 @@ body {
 .dictation-bar[data-state="processing"] .wave span {
   background: linear-gradient(180deg, #fff7db, var(--process));
   animation-duration: 640ms;
+}
+
+.dictation-bar[data-state="clarifying"] .status-dot {
+  background: var(--process);
+  box-shadow: 0 0 0 6px rgba(243, 201, 105, 0.14);
+}
+
+.dictation-bar[data-state="clarifying"] .wave span {
+  background: linear-gradient(180deg, #fff7db, var(--process));
+  animation-duration: 520ms;
+}
+
+.progress {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  width: 46%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--process), transparent);
+  transform: translateX(-110%);
+}
+
+.dictation-bar[data-state="processing"] .progress,
+.dictation-bar[data-state="clarifying"] .progress {
+  opacity: 1;
+}
+
+.dictation-bar[data-state="processing"] .progress span,
+.dictation-bar[data-state="clarifying"] .progress span {
+  animation: progress-run 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-run {
+  to { transform: translateX(240%); }
 }
 
 .dictation-bar[data-state="done"] .status-dot {

@@ -81,6 +81,17 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(_clean_correction('Correction: "Hello there."'), "Hello there.")
         self.assertEqual(_clean_correction("```\nHello there.\n```"), "Hello there.")
 
+    def test_clean_correction_removes_chat_template_leak(self):
+        leaked = (
+            "This is fixed.<|im_end|>\n<|im_start|>user\nInput: i dont know where he wnet"
+            "<|im_end|>\n<|im_start|>assistant\nI do not know where he went."
+        )
+        self.assertEqual(_clean_correction(leaked), "This is fixed.")
+
+    def test_clean_correction_stops_before_extra_examples(self):
+        leaked = "This is fixed.\nInput: he dont know where he wnet yesterday"
+        self.assertEqual(_clean_correction(leaked), "This is fixed.")
+
 
 if __name__ == "__main__":
     unittest.main()

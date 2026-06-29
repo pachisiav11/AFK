@@ -107,6 +107,7 @@ class LlamaServer:
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
+                "stop": ["<|im_end|>", "<|im_start|>"],
                 "stream": False,
                 # Disable reasoning so models like Gemma 4 output the answer
                 # directly instead of spending the budget "thinking". Harmless
