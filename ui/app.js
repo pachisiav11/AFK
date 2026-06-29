@@ -8,6 +8,13 @@ let recTimer = null;
 let recStart = 0;
 let _settingsCache = null;
 
+const DEFAULT_HOTKEYS = {
+  push_to_talk: 'Ctrl+Shift+Space',
+  toggle: 'Ctrl+Alt+Space',
+  clarify: 'Ctrl+Alt+K',
+  learn_correction: 'Ctrl+Alt+L'
+};
+
 function escapeHtml(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -210,13 +217,15 @@ async function refreshHotkeys() {
     const cfg = await window.afk.call('get_settings', {});
     _settingsCache = cfg;
     const hk = cfg.hotkeys || {};
-    $('#pttHotkey').textContent = hk.push_to_talk || 'Ctrl+Space';
-    $('#toggleHotkey').textContent = hk.toggle || 'Ctrl+Shift+Space';
-    $('#clarifyHotkey').textContent = hk.clarify || 'Ctrl+Alt+K';
+    $('#pttHotkey').textContent = hk.push_to_talk || DEFAULT_HOTKEYS.push_to_talk;
+    $('#toggleHotkey').textContent = hk.toggle || DEFAULT_HOTKEYS.toggle;
+    $('#clarifyHotkey').textContent = hk.clarify || DEFAULT_HOTKEYS.clarify;
+    $('#learnHotkey').textContent = hk.learn_correction || DEFAULT_HOTKEYS.learn_correction;
   } catch (e) {
-    $('#pttHotkey').textContent = 'Ctrl+Space';
-    $('#toggleHotkey').textContent = 'Ctrl+Shift+Space';
-    $('#clarifyHotkey').textContent = 'Ctrl+Alt+K';
+    $('#pttHotkey').textContent = DEFAULT_HOTKEYS.push_to_talk;
+    $('#toggleHotkey').textContent = DEFAULT_HOTKEYS.toggle;
+    $('#clarifyHotkey').textContent = DEFAULT_HOTKEYS.clarify;
+    $('#learnHotkey').textContent = DEFAULT_HOTKEYS.learn_correction;
   }
 }
 
@@ -281,7 +290,12 @@ function eventMatchesCombo(event, combo) {
 
 function configuredHotkeys() {
   const hk = (_settingsCache && _settingsCache.hotkeys) || {};
-  return [hk.push_to_talk || 'Ctrl+Space', hk.toggle || 'Ctrl+Shift+Space', hk.clarify || 'Ctrl+Alt+K'];
+  return [
+    hk.push_to_talk || DEFAULT_HOTKEYS.push_to_talk,
+    hk.toggle || DEFAULT_HOTKEYS.toggle,
+    hk.clarify || DEFAULT_HOTKEYS.clarify,
+    hk.learn_correction || DEFAULT_HOTKEYS.learn_correction
+  ];
 }
 
 function initEditableHotkeyHandling() {
@@ -391,11 +405,51 @@ function toggleHtml(id, checked) {
   return `<label class="switch" aria-label="${escapeHtml(id)}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="slider"></span></label>`;
 }
 
+function learningPanel(adaptation) {
+  const phrases = adaptation.calibration_phrases || [];
+  const phrase = phrases[(adaptation.calibration_count || 0) % Math.max(phrases.length, 1)] || '';
+  return `<section class="learning-panel" aria-label="Voice learning">
+    <div class="learning-head">
+      <div>
+        <span class="section-kicker">Voice learning</span>
+        <h2>Personal corrections</h2>
+      </div>
+      <div class="learning-counts">
+        <span>${escapeHtml(adaptation.correction_count || 0)} corrections</span>
+        <span>${escapeHtml(adaptation.calibration_count || 0)} samples</span>
+      </div>
+    </div>
+    <div class="learning-grid">
+      <div class="learning-box">
+        <span class="setting-name">Calibration sentence</span>
+        <p id="calibrationPhrase">${escapeHtml(phrase)}</p>
+        <div class="record-actions">
+          <button class="btn" id="startCalibrationBtn">Record sentence</button>
+          <button class="btn btn-primary" id="finishCalibrationBtn">Finish and learn</button>
+        </div>
+      </div>
+      <div class="learning-box">
+        <span class="setting-name">Manual correction</span>
+        <div class="correction-grid">
+          <input type="text" id="learnHeard" placeholder="AFK heard this..." spellcheck="false">
+          <input type="text" id="learnIntended" placeholder="I meant this..." spellcheck="false">
+        </div>
+        <div class="record-actions">
+          <button class="btn btn-primary" id="learnManualBtn">Learn correction</button>
+          <button class="btn btn-quiet" id="clearLearningBtn">Clear learning</button>
+        </div>
+      </div>
+    </div>
+    <div class="setting-status" id="learningStatus">Tip: after fixing a dictation in any app, select the corrected text and press ${escapeHtml(DEFAULT_HOTKEYS.learn_correction)}.</div>
+  </section>`;
+}
+
 async function refreshSettings() {
   const list = $('#settingsList');
   try {
     const cfg = await window.afk.call('get_settings', {});
     _settingsCache = cfg;
+    const adaptation = await window.afk.call('get_adaptation', {});
     const mics = (await window.afk.call('list_microphones', {})).devices || [];
     const micOpts = ['<option value="">System default</option>']
       .concat(mics.map((d) =>
@@ -415,6 +469,8 @@ async function refreshSettings() {
       settingRow('Push-to-talk hotkey', 'Hold to record', `<input type="text" class="hotkey-input" id="hk-push_to_talk" value="${escapeHtml(hk.push_to_talk || '')}" spellcheck="false">`) +
       settingRow('Toggle hotkey', 'Press once to start or stop', `<input type="text" class="hotkey-input" id="hk-toggle" value="${escapeHtml(hk.toggle || '')}" spellcheck="false">`) +
       settingRow('Clarify hotkey', 'Polish selected text or clipboard', `<input type="text" class="hotkey-input" id="hk-clarify" value="${escapeHtml(hk.clarify || '')}" spellcheck="false">`) +
+      settingRow('Learn correction hotkey', 'Select corrected text after dictation', `<input type="text" class="hotkey-input" id="hk-learn_correction" value="${escapeHtml(hk.learn_correction || '')}" spellcheck="false">`) +
+      learningPanel(adaptation) +
       settingRow('Logging', 'Write diagnostic logs to disk', toggleHtml('set-logging', cfg.logging)) +
       settingRow('Developer mode', 'Enable extra diagnostics', toggleHtml('set-developer_mode', cfg.developer_mode)) +
       `<div class="settings-actions"><button class="btn" id="resetStatsBtn">Reset statistics</button></div>`;
@@ -449,9 +505,42 @@ function wireSettingControls() {
     saveSetting('word_count_threshold', parseInt(threshold.value, 10) || 60);
   });
 
-  ['push_to_talk', 'toggle', 'clarify'].forEach((k) => {
+  ['push_to_talk', 'toggle', 'clarify', 'learn_correction'].forEach((k) => {
     const el = $('#hk-' + k);
     el.addEventListener('change', saveHotkeys);
+  });
+
+  const status = $('#learningStatus');
+  $('#learnManualBtn').addEventListener('click', async () => {
+    const heard = $('#learnHeard').value.trim();
+    const intended = $('#learnIntended').value.trim();
+    if (!intended) {
+      status.textContent = 'Add the intended correction first.';
+      return;
+    }
+    const res = await window.afk.call('learn_correction', { heard, intended, source: 'settings' });
+    status.textContent = res.ok ? 'Learned. Future transcripts will use this correction.' : `Nothing learned: ${res.reason || 'unchanged'}.`;
+    refreshSettings();
+  });
+
+  $('#startCalibrationBtn').addEventListener('click', async () => {
+    const expected = $('#calibrationPhrase').textContent.trim();
+    status.textContent = 'Recording calibration sentence...';
+    await window.afk.call('start_calibration', { expected });
+  });
+
+  $('#finishCalibrationBtn').addEventListener('click', async () => {
+    status.textContent = 'Learning calibration sample...';
+    const res = await window.afk.call('finish_calibration', {});
+    const heard = (res && res.raw_text) || (res && res.text) || '';
+    status.textContent = heard ? `Learned from: "${heard}"` : 'No speech detected for this calibration sample.';
+    refreshSettings();
+  });
+
+  $('#clearLearningBtn').addEventListener('click', async () => {
+    await window.afk.call('clear_adaptation', {});
+    status.textContent = 'Voice learning cleared.';
+    refreshSettings();
   });
 
   $('#resetStatsBtn').addEventListener('click', async () => {
@@ -474,7 +563,8 @@ async function saveHotkeys() {
   const hotkeys = {
     push_to_talk: $('#hk-push_to_talk').value.trim(),
     toggle: $('#hk-toggle').value.trim(),
-    clarify: $('#hk-clarify').value.trim()
+    clarify: $('#hk-clarify').value.trim(),
+    learn_correction: $('#hk-learn_correction').value.trim()
   };
   try {
     const updated = await window.afk.call('set_hotkeys', { hotkeys });
@@ -522,6 +612,9 @@ function initEvents() {
         break;
       case 'statistics_updated':
         if ($('#page-statistics').classList.contains('active')) refreshStatistics();
+        break;
+      case 'correction_learned':
+        $('#recordStatus').textContent = data && data.ok ? 'Learned correction' : 'Learning skipped';
         break;
       default:
         break;

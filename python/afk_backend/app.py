@@ -21,6 +21,7 @@ from .clipboard.clipboard import Clipboard
 from .hotkeys import HotkeyManager
 from .clarify.engine import ClarifyEngine
 from .statistics import StatsStore
+from .adaptation import AdaptationStore
 
 
 class AFKApp:
@@ -41,6 +42,7 @@ class AFKApp:
                 "ptt_stop": self._hk_ptt_stop,
                 "toggle": self._hk_toggle,
                 "clarify": self._hk_clarify,
+                "learn_correction": self._hk_learn_correction,
             }
         )
 
@@ -49,6 +51,10 @@ class AFKApp:
 
         # Phase 5 service.
         self.statistics = StatsStore()
+        self.adaptation = AdaptationStore()
+        self._last_dictation_text = ""
+        self._last_inserted_text = ""
+        self._calibration_expected = ""
 
         self._methods: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_core()
@@ -56,6 +62,7 @@ class AFKApp:
         self._register_clipboard_hotkeys()
         self._register_clarify()
         self._register_statistics()
+        self._register_adaptation()
 
     # ---- lifecycle ----
     def on_started(self) -> None:
@@ -221,6 +228,15 @@ class AFKApp:
                     "message": "Microphone signal is too quiet. Check Windows input volume or choose another mic.",
                 }
             )
+        if result.get("text"):
+            adapted, changed, applied = self.adaptation.apply(result.get("text", ""))
+            if changed:
+                result["raw_text"] = result.get("text", "")
+                result["text"] = adapted
+                result["adapted"] = True
+                result["adaptations"] = applied
+                logutil.info(f"Applied {len(applied)} learned correction(s)")
+            self._last_dictation_text = result.get("text", "")
         # Record usage stats (words dictated, recording length, transcription latency).
         try:
             words = len((result.get("text") or "").split())
@@ -235,6 +251,9 @@ class AFKApp:
                 "latency_ms": result.get("latency_ms", 0),
                 "reason": result.get("reason"),
                 "message": result.get("message"),
+                "raw_text": result.get("raw_text"),
+                "adapted": result.get("adapted", False),
+                "adaptations": result.get("adaptations", []),
                 "raw_levels": result.get("raw_levels"),
                 "processed_levels": result.get("processed_levels"),
             },
@@ -345,6 +364,7 @@ class AFKApp:
             before = text
             result["action"] = self._paste(before)
             result["inserted"] = True
+            self._last_inserted_text = before
         return result
 
     # ---- hotkey callbacks (run on the listener thread; offload heavy work) ----
@@ -362,6 +382,9 @@ class AFKApp:
 
     def _hk_clarify(self) -> None:
         threading.Thread(target=self._clarify_flow, daemon=True).start()
+
+    def _hk_learn_correction(self) -> None:
+        threading.Thread(target=self._learn_correction_flow, daemon=True).start()
 
     # ---- statistics methods (Phase 5) ----
     def _register_statistics(self) -> None:
@@ -446,6 +469,63 @@ class AFKApp:
             "clarify_done",
             {"text": out, "model": result.get("model"), "latency_ms": result.get("latency_ms")},
         )
+
+    # ---- voice adaptation methods ----
+    def _register_adaptation(self) -> None:
+        self.register("get_adaptation", lambda p: self.adaptation.snapshot())
+        self.register("learn_correction", self._learn_correction_method)
+        self.register("clear_adaptation", self._clear_adaptation)
+        self.register("calibration_phrases", lambda p: {"phrases": self.adaptation.snapshot()["calibration_phrases"]})
+        self.register("start_calibration", self._start_calibration)
+        self.register("finish_calibration", self._finish_calibration)
+
+    def _learn_correction_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        intended = params.get("intended", "")
+        heard = params.get("heard") or self._last_inserted_text or self._last_dictation_text
+        result = self.adaptation.learn_correction(heard, intended, source=params.get("source", "manual"))
+        emit_event("correction_learned", result)
+        return result
+
+    def _clear_adaptation(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        snapshot = self.adaptation.clear()
+        emit_event("adaptation_updated", snapshot)
+        return snapshot
+
+    def _start_calibration(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        expected = (params.get("expected") or "").strip()
+        if not expected:
+            raise RpcError("start_calibration requires 'expected'")
+        self._calibration_expected = expected
+        return self.start_recording(params)
+
+    def _finish_calibration(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        result = self.stop_recording({})
+        expected = self._calibration_expected
+        self._calibration_expected = ""
+        learned = self.adaptation.record_calibration(expected, result.get("raw_text") or result.get("text", ""))
+        out = {**result, "calibration": learned}
+        emit_event("adaptation_updated", self.adaptation.snapshot())
+        return out
+
+    def _learn_correction_flow(self) -> None:
+        heard = self._last_inserted_text or self._last_dictation_text
+        if not heard:
+            emit_event("learn_unavailable", {"reason": "No previous dictation to learn from"})
+            return
+
+        try:
+            self.hotkeys.set_injecting(True)
+            selection = self.clipboard.capture_selection()
+        finally:
+            self.hotkeys.set_injecting(False)
+
+        intended = selection.strip() or self.clipboard.get_text().strip()
+        if not intended:
+            emit_event("learn_unavailable", {"reason": "Select corrected text or copy it first"})
+            return
+
+        result = self.adaptation.learn_correction(heard, intended, source="hotkey")
+        emit_event("correction_learned", result)
 
 
 def _empty_transcription(duration: float, reason: str, message: str = "", **extra) -> Dict[str, Any]:

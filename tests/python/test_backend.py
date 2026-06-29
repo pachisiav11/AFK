@@ -47,7 +47,7 @@ class TestDispatch(unittest.TestCase):
             "update_settings", {"patch": {"hotkeys": {"clarify": "Ctrl+Alt+C"}}}
         )
         self.assertEqual(updated2["hotkeys"]["clarify"], "Ctrl+Alt+C")
-        self.assertEqual(updated2["hotkeys"]["push_to_talk"], "Ctrl+Space")
+        self.assertEqual(updated2["hotkeys"]["push_to_talk"], "Ctrl+Shift+Space")
 
     def test_unknown_method(self):
         from afk_backend.rpc import RpcError

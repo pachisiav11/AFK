@@ -518,6 +518,92 @@ textarea:focus-visible {
   padding: 8px 10px;
 }
 
+.learning-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(65, 209, 143, 0.1), transparent 42%),
+    var(--bg-panel);
+  padding: 18px;
+}
+
+.learning-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.learning-head h2 {
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.learning-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.learning-counts span,
+.setting-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.learning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.learning-box {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 14px;
+}
+
+.learning-box p {
+  color: var(--text);
+  line-height: 1.45;
+  margin: 10px 0 14px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.correction-grid {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.correction-grid input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  background: var(--bg-field);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.setting-status {
+  display: block;
+  border-radius: var(--radius);
+  margin-top: 12px;
+  line-height: 1.35;
+}
+
 .setting-control input[type="number"] { min-width: 96px; }
 .hotkey-input { font-family: "Cascadia Mono", "Consolas", monospace; }
 
@@ -639,6 +725,10 @@ html[data-theme="light"] {
   .page-head { align-items: flex-start; flex-direction: column; }
   .setting-row { grid-template-columns: 1fr; }
   .setting-control { justify-content: flex-start; }
+  .learning-head,
+  .learning-grid { grid-template-columns: 1fr; }
+  .learning-head { flex-direction: column; }
+  .learning-counts { justify-content: flex-start; }
   .record-actions { align-items: stretch; flex-direction: column; }
   .btn { width: 100%; }
 }

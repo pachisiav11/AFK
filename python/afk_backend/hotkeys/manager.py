@@ -6,9 +6,10 @@ the backend (pynput), co-located with the audio/ASR code for the lowest
 possible latency on the dictation hot path.
 
 Matching uses *exact* modifier sets so overlapping combos disambiguate:
-  Ctrl+Space          -> push-to-talk   (Ctrl only)
-  Ctrl+Shift+Space    -> toggle         (Ctrl+Shift)
+  Ctrl+Shift+Space    -> push-to-talk   (Ctrl+Shift)
+  Ctrl+Alt+Space      -> toggle         (Ctrl+Alt)
   Ctrl+Alt+K          -> clarify        (Ctrl+Alt)
+  Ctrl+Alt+L          -> learn correction from the last dictation
 
 Heavy work (recording/transcription/paste) must be dispatched off the listener
 thread by the callbacks; this class only detects and routes events.
@@ -90,7 +91,7 @@ def _norm(key) -> Tuple[str, str]:
 
 class HotkeyManager:
     def __init__(self, callbacks: Dict[str, Callable[[], None]]):
-        """callbacks: keys 'ptt_start','ptt_stop','toggle','clarify'."""
+        """callbacks: keys 'ptt_start','ptt_stop','toggle','clarify','learn_correction'."""
         self._cb = callbacks
         self._listener = None
         self._lock = threading.Lock()
@@ -106,9 +107,10 @@ class HotkeyManager:
     def set_bindings(self, hotkeys: Dict[str, str]) -> None:
         binds: Dict[str, Combo] = {}
         for action, default in (
-            ("push_to_talk", "ctrl+space"),
-            ("toggle", "ctrl+shift+space"),
+            ("push_to_talk", "ctrl+shift+space"),
+            ("toggle", "ctrl+alt+space"),
             ("clarify", "ctrl+alt+k"),
+            ("learn_correction", "ctrl+alt+l"),
         ):
             parsed = parse_combo(hotkeys.get(action, default))
             if parsed:
@@ -187,7 +189,7 @@ class HotkeyManager:
     def _evaluate_edge(self):
         if self._fired_edge or self._main_down is None:
             return
-        for action in ("toggle", "clarify"):
+        for action in ("toggle", "clarify", "learn_correction"):
             combo = self._bindings.get(action)
             if not combo:
                 continue

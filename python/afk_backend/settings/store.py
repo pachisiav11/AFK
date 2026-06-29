@@ -25,9 +25,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "logging": True,
     "developer_mode": False,
     "hotkeys": {
-        "push_to_talk": "Ctrl+Space",       # held to record
-        "toggle": "Ctrl+Shift+Space",        # toggle recording
+        "push_to_talk": "Ctrl+Shift+Space",  # held to record
+        "toggle": "Ctrl+Alt+Space",          # toggle recording
         "clarify": "Ctrl+Alt+K",             # clarify selection/clipboard
+        "learn_correction": "Ctrl+Alt+L",    # learn selection/clipboard as correction
     },
     "noise_suppression": True,
     "auto_gain": True,
@@ -96,6 +97,15 @@ def _migrate_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     hotkeys = data.get("hotkeys") or {}
     if hotkeys.get("clarify") == "Ctrl+Shift+C":
         hotkeys["clarify"] = DEFAULT_SETTINGS["hotkeys"]["clarify"]
+    if data.get("_hotkeys_reliability_migrated") is not True:
+        if hotkeys.get("push_to_talk") in {None, "Ctrl+Space"}:
+            hotkeys["push_to_talk"] = DEFAULT_SETTINGS["hotkeys"]["push_to_talk"]
+        if hotkeys.get("toggle") in {None, "Ctrl+Shift+Space"}:
+            hotkeys["toggle"] = DEFAULT_SETTINGS["hotkeys"]["toggle"]
+        data["_hotkeys_reliability_migrated"] = True
+    if not hotkeys.get("learn_correction"):
+        hotkeys["learn_correction"] = DEFAULT_SETTINGS["hotkeys"]["learn_correction"]
+    data["hotkeys"] = hotkeys
     if data.get("word_count_threshold") in {42, 60}:
         data["word_count_threshold"] = DEFAULT_SETTINGS["word_count_threshold"]
     if data.get("auto_clarify") is True and data.get("_auto_clarify_migrated") is not True:

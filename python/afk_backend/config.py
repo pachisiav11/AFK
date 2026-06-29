@@ -103,6 +103,10 @@ def stats_path() -> Path:
     return data_dir() / "statistics.json"
 
 
+def adaptation_path() -> Path:
+    return data_dir() / "adaptation.json"
+
+
 # ---- Model identifiers (used from Phase 2/4 onward) ----
 PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 GEMMA_SHORT_MODEL = "gemma-3-270m-it"

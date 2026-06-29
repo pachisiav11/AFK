@@ -19,6 +19,7 @@ SHIFT = keyboard.Key.shift
 SPACE = keyboard.Key.space
 C = keyboard.KeyCode(vk=67)  # 'C'
 K = keyboard.KeyCode(vk=75)  # 'K'
+L = keyboard.KeyCode(vk=76)  # 'L'
 
 
 class TestParse(unittest.TestCase):
@@ -45,44 +46,49 @@ class TestManager(unittest.TestCase):
                 "ptt_stop": lambda: self.events.append("ptt_stop"),
                 "toggle": lambda: self.events.append("toggle"),
                 "clarify": lambda: self.events.append("clarify"),
+                "learn_correction": lambda: self.events.append("learn_correction"),
             }
         )
         self.mgr.set_bindings(
             {
-                "push_to_talk": "ctrl+space",
-                "toggle": "ctrl+shift+space",
+                "push_to_talk": "ctrl+shift+space",
+                "toggle": "ctrl+alt+space",
                 "clarify": "ctrl+alt+k",
+                "learn_correction": "ctrl+alt+l",
             }
         )
 
     def test_push_to_talk_hold(self):
         self.mgr._on_press(CTRL)
+        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, ["ptt_start"])
         self.mgr._on_release(SPACE)
         self.assertEqual(self.events, ["ptt_start", "ptt_stop"])
+        self.mgr._on_release(SHIFT)
         self.mgr._on_release(CTRL)
 
     def test_ptt_stops_when_modifier_released_first(self):
         self.mgr._on_press(CTRL)
+        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.mgr._on_release(CTRL)  # release ctrl while still holding space
         self.assertEqual(self.events, ["ptt_start", "ptt_stop"])
 
     def test_toggle_not_confused_with_ptt(self):
-        # Ctrl+Shift+Space must fire toggle, NOT push-to-talk.
+        # Ctrl+Alt+Space must fire toggle, NOT push-to-talk.
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(SHIFT)
+        self.mgr._on_press(keyboard.Key.alt_l)
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, ["toggle"])
         self.assertNotIn("ptt_start", self.events)
         self.mgr._on_release(SPACE)
-        self.mgr._on_release(SHIFT)
+        self.mgr._on_release(keyboard.Key.alt_l)
         self.mgr._on_release(CTRL)
 
     def test_toggle_fires_once_per_press(self):
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(SHIFT)
+        self.mgr._on_press(keyboard.Key.alt_l)
         self.mgr._on_press(SPACE)
         self.mgr._on_press(SPACE)  # auto-repeat shouldn't re-fire
         self.assertEqual(self.events.count("toggle"), 1)
@@ -92,6 +98,12 @@ class TestManager(unittest.TestCase):
         self.mgr._on_press(keyboard.Key.alt_l)
         self.mgr._on_press(K)
         self.assertEqual(self.events, ["clarify"])
+
+    def test_learn_correction(self):
+        self.mgr._on_press(CTRL)
+        self.mgr._on_press(keyboard.Key.alt_l)
+        self.mgr._on_press(L)
+        self.assertEqual(self.events, ["learn_correction"])
 
     def test_injecting_suppresses_events(self):
         self.mgr.set_injecting(True)

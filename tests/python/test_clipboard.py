@@ -15,6 +15,7 @@ class FakeClipboard(clipmod.Clipboard):
     def __init__(self, prior="old", copied=None):
         self.values = [prior]
         self.copied = copied
+        self.pasted = 0
 
     def get_text(self):
         return self.values[-1]
@@ -25,6 +26,9 @@ class FakeClipboard(clipmod.Clipboard):
     def _copy(self):
         if self.copied is not None:
             self.values.append(self.copied)
+
+    def paste(self):
+        self.pasted += 1
 
 
 class TestClipboardSelection(unittest.TestCase):
@@ -39,6 +43,13 @@ class TestClipboardSelection(unittest.TestCase):
         cb = FakeClipboard(prior="clipboard text", copied="selected text")
         self.assertEqual(cb.capture_selection(), "selected text")
         self.assertEqual(cb.get_text(), "clipboard text")
+
+    @patch.object(clipmod.time, "sleep", lambda _s: None)
+    def test_paste_or_copy_leaves_transcript_on_clipboard(self):
+        cb = FakeClipboard(prior="clipboard text")
+        self.assertEqual(cb.paste_or_copy("hello world"), "pasted")
+        self.assertEqual(cb.get_text(), "hello world")
+        self.assertEqual(cb.pasted, 1)
 
 
 if __name__ == "__main__":

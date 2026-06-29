@@ -33,9 +33,11 @@ else:
 
 from .. import logutil
 
-# Small delays let the target app observe clipboard changes / key events.
-_CLIPBOARD_SETTLE = 0.015
-_KEY_SETTLE = 0.01
+# Delays let Electron/Chromium and sandboxed text boxes observe clipboard
+# changes before AFK restores or touches the clipboard again.
+_CLIPBOARD_SETTLE = 0.08
+_KEY_SETTLE = 0.02
+_PASTE_SETTLE = 0.25
 
 
 class Clipboard:
@@ -85,8 +87,8 @@ class Clipboard:
         self.set_text(text)
         time.sleep(_CLIPBOARD_SETTLE)
         self.paste()
+        time.sleep(_PASTE_SETTLE)
         if restore:
-            time.sleep(_CLIPBOARD_SETTLE)
             try:
                 self.set_text(prior or "")
             except Exception:
@@ -116,20 +118,20 @@ class Clipboard:
 
     def replace_selection(self, text: str) -> bool:
         """Replace the currently selected text by pasting over it."""
-        return self.paste_text(text, restore=True)
+        return self.paste_text(text, restore=False)
 
     def paste_or_copy(self, text: str) -> str:
         """Paste immediately; copy only if synthetic paste fails.
 
         Chromium/Electron text boxes often do not expose a normal Win32 caret,
-        so textbox detection is too fragile for dictation. Use the user's
-        explicit auto-paste preference as intent and restore the clipboard
-        after Ctrl+V.
+        so textbox detection is too fragile for dictation. Keep the transcript
+        on the clipboard after Ctrl+V so a missed synthetic paste still has an
+        immediate manual fallback.
         """
         if not text:
             return "empty"
         try:
-            self.paste_text(text, restore=True)
+            self.paste_text(text, restore=False)
             return "pasted"
         except Exception as exc:  # noqa: BLE001
             logutil.warn(f"paste failed; copying instead: {exc}")
