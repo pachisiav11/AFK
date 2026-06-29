@@ -140,18 +140,24 @@ class ClarifyEngine:
 
         threading.Thread(target=_run, name="clarify-preload", daemon=True).start()
 
-    def preload_preferred_async(self) -> None:
-        model = self.long if self.long.available else self.short
-        if not model.available:
+    def preload_long_async(self) -> None:
+        if not self.long.available:
             return
 
         def _run():
             try:
-                model.ensure_loaded()
+                self.long.ensure_loaded()
             except Exception:
                 pass
 
-        threading.Thread(target=_run, name="clarify-preload", daemon=True).start()
+        threading.Thread(target=_run, name="clarify-preload-long", daemon=True).start()
+
+    def preload_preferred_async(self) -> None:
+        """Eagerly load both Clarify models at startup so routing never has
+        to lazy-load mid-request (short is small/fast; long is preloaded
+        too since it's the default for most dictation lengths)."""
+        self.preload_short_async()
+        self.preload_long_async()
 
     def shutdown(self) -> None:
         for m in (self.short, self.long):

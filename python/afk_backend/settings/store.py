@@ -96,8 +96,9 @@ def _migrate_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     hotkeys = data.get("hotkeys") or {}
     if hotkeys.get("clarify") == "Ctrl+Shift+C":
         hotkeys["clarify"] = DEFAULT_SETTINGS["hotkeys"]["clarify"]
-    if data.get("word_count_threshold") in {42, 60}:
+    if data.get("word_count_threshold") in {42, 60} and data.get("_word_count_threshold_migrated") is not True:
         data["word_count_threshold"] = DEFAULT_SETTINGS["word_count_threshold"]
+        data["_word_count_threshold_migrated"] = True
     if data.get("auto_clarify") is True and data.get("_auto_clarify_migrated") is not True:
         data["auto_clarify"] = DEFAULT_SETTINGS["auto_clarify"]
         data["_auto_clarify_migrated"] = True
