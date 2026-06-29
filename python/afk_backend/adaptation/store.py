@@ -40,6 +40,9 @@ class AdaptationStore:
         out["correction_count"] = len(out.get("corrections", []))
         out["vocabulary_count"] = len(out.get("vocabulary", []))
         out["calibration_count"] = len(out.get("calibration", []))
+        out["training_count"] = len(out.get("training", []))
+        out["word_training_count"] = len([x for x in out.get("training", []) if x.get("kind") == "word"])
+        out["trigger_count"] = len([x for x in out.get("training", []) if x.get("kind") == "trigger"])
         return out
 
     def apply(self, text: str) -> Tuple[str, bool, List[Dict[str, str]]]:
@@ -124,6 +127,40 @@ class AdaptationStore:
             self._save()
         return {"ok": True, "expected": expected, "heard": heard, "learn_result": result}
 
+    def record_training(self, kind: str, spoken: str, output: str, heard: str) -> Dict[str, Any]:
+        kind = kind if kind in {"word", "trigger"} else "word"
+        spoken = _clean_text(spoken)
+        output = _clean_text(output)
+        heard = _clean_text(heard)
+        if not spoken or not output:
+            return {"ok": False, "reason": "missing_training_text"}
+
+        learn_result = self.learn_correction(heard, output, source=f"train_{kind}") if heard else {
+            "ok": False,
+            "reason": "missing_heard",
+        }
+        with self._lock:
+            self._data.setdefault("training", []).append(
+                {
+                    "kind": kind,
+                    "spoken": spoken,
+                    "output": output,
+                    "heard": heard,
+                    "created_at": _now(),
+                    "learned": bool(learn_result.get("ok")),
+                }
+            )
+            self._data["setup_complete"] = True
+            self._save()
+        return {
+            "ok": True,
+            "kind": kind,
+            "spoken": spoken,
+            "output": output,
+            "heard": heard,
+            "learn_result": learn_result,
+        }
+
     def clear(self) -> Dict[str, Any]:
         with self._lock:
             self._data = _default_data()
@@ -133,6 +170,9 @@ class AdaptationStore:
         out["correction_count"] = 0
         out["vocabulary_count"] = 0
         out["calibration_count"] = 0
+        out["training_count"] = 0
+        out["word_training_count"] = 0
+        out["trigger_count"] = 0
         return out
 
     def _upsert_correction(self, heard: str, intended: str, source: str) -> None:
@@ -174,7 +214,7 @@ class AdaptationStore:
                 user = json.load(fh)
             if isinstance(user, dict):
                 data.update({k: user.get(k, v) for k, v in data.items()})
-                for key in ("corrections", "vocabulary", "calibration"):
+                for key in ("corrections", "vocabulary", "calibration", "training"):
                     if not isinstance(data.get(key), list):
                         data[key] = []
         except Exception as exc:  # noqa: BLE001
@@ -195,6 +235,7 @@ def _default_data() -> Dict[str, Any]:
         "corrections": [],
         "vocabulary": [],
         "calibration": [],
+        "training": [],
     }
 
 

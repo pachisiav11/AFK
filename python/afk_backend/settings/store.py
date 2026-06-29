@@ -21,6 +21,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "launch_minimized": True,
     "auto_paste": True,
     "auto_clarify": False,
+    "auto_capitalization": True,
+    "auto_punctuation": True,
+    "training_corrections": True,
     "word_count_threshold": config.DEFAULT_WORD_THRESHOLD,
     "logging": True,
     "developer_mode": False,
@@ -106,7 +109,7 @@ def _migrate_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     if not hotkeys.get("learn_correction"):
         hotkeys["learn_correction"] = DEFAULT_SETTINGS["hotkeys"]["learn_correction"]
     data["hotkeys"] = hotkeys
-    if data.get("word_count_threshold") in {42, 60}:
+    if data.get("word_count_threshold") in {4, 42, 60}:
         data["word_count_threshold"] = DEFAULT_SETTINGS["word_count_threshold"]
     if data.get("auto_clarify") is True and data.get("_auto_clarify_migrated") is not True:
         data["auto_clarify"] = DEFAULT_SETTINGS["auto_clarify"]

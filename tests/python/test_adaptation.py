@@ -46,6 +46,23 @@ class TestAdaptationStore(unittest.TestCase):
         snapshot = store.clear()
         self.assertEqual(snapshot["correction_count"], 0)
 
+    def test_trigger_training_replaces_spoken_phrase_with_output(self):
+        from afk_backend.adaptation import AdaptationStore
+
+        store = AdaptationStore()
+        res = store.record_training(
+            kind="trigger",
+            spoken="my github username is",
+            output="paradoxical_duck",
+            heard="my github username is",
+        )
+        self.assertTrue(res["ok"])
+
+        text, changed, _applied = store.apply("my github username is")
+        self.assertTrue(changed)
+        self.assertEqual(text, "paradoxical_duck")
+        self.assertEqual(store.snapshot()["trigger_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

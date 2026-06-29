@@ -7,6 +7,7 @@ let isRecording = false;
 let recTimer = null;
 let recStart = 0;
 let _settingsCache = null;
+let activeTrainingKind = null;
 
 const DEFAULT_HOTKEYS = {
   push_to_talk: 'Ctrl+Shift+Space',
@@ -31,7 +32,9 @@ function initNav() {
       const page = btn.dataset.page;
       $$('.nav-item').forEach((b) => b.classList.toggle('active', b === btn));
       $$('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${page}`));
+      if (page === 'home') refreshHomeStats();
       if (page === 'statistics') refreshStatistics();
+      if (page === 'train') refreshTrain();
       if (page === 'settings') refreshSettings();
     });
   });
@@ -349,18 +352,65 @@ function statCard(value, label, accent) {
     `<div class="stat-label">${escapeHtml(label)}</div></div>`;
 }
 
+function homeStatCard(value, label, accent) {
+  return `<div class="home-stat"><strong${accent ? ' class="accent"' : ''}>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+}
+
+function barMeter(label, value, max, accent) {
+  const pct = Math.max(3, Math.min(100, max ? (Number(value || 0) / max) * 100 : 0));
+  return `<div class="bar-row"><span>${escapeHtml(label)}</span><div class="bar-track"><i class="${accent ? 'accent' : ''}" style="width:${pct}%"></i></div><b>${escapeHtml(value)}</b></div>`;
+}
+
+function sparkBars(values) {
+  const max = Math.max(1, ...values.map((v) => Number(v || 0)));
+  return `<div class="spark-bars">${values.map((v, i) => {
+    const h = Math.max(12, Math.round((Number(v || 0) / max) * 76));
+    return `<span style="height:${h}px" title="Bucket ${i + 1}: ${escapeHtml(v)}"></span>`;
+  }).join('')}</div>`;
+}
+
+async function refreshHomeStats() {
+  const box = $('#homeStats');
+  if (!box) return;
+  try {
+    const [s, adaptation] = await Promise.all([
+      window.afk.call('get_statistics', {}),
+      window.afk.call('get_adaptation', {})
+    ]);
+    const saved = fmtDuration((s.words.today / (s.typing_wpm_assumed || 40)) * 60);
+    box.innerHTML =
+      homeStatCard(s.words.today.toLocaleString(), 'Words today', true) +
+      homeStatCard(s.words.week.toLocaleString(), 'Words this week') +
+      homeStatCard(saved, 'Typing saved today', true) +
+      homeStatCard((adaptation.training_count || 0).toLocaleString(), 'Training samples');
+  } catch (e) {
+    box.innerHTML = '<div class="empty-hint">Statistics unavailable while the backend starts.</div>';
+  }
+}
+
 async function refreshStatistics() {
   const grid = $('#statsGrid');
   try {
     const s = await window.afk.call('get_statistics', {});
     const todaySaved = (s.words.today / (s.typing_wpm_assumed || 40));
+    const wordMax = Math.max(1, s.words.today, s.words.week, s.words.month);
+    const latencyBuckets = [
+      Math.max(1, Math.round((s.avg_transcription_latency_ms || 0) / 100)),
+      s.clarifications || 0,
+      Math.max(1, Math.round((s.avg_clarify_latency_ms || 0) / 100)),
+      s.recordings || 0,
+      Math.max(1, s.streak_current || 0)
+    ];
     grid.innerHTML =
       `<section class="stats-section">
         <div class="stats-section-title">Words spoken</div>
-        <div class="stats-grid">
+        <div class="stats-grid stats-grid-featured">
           ${statCard(s.words.today.toLocaleString(), 'Today', true)}
-          ${statCard(s.words.week.toLocaleString(), 'This week')}
-          ${statCard(s.words.month.toLocaleString(), 'This month')}
+          <div class="stat-card chart-card">
+            ${barMeter('Today', s.words.today, wordMax, true)}
+            ${barMeter('Week', s.words.week, wordMax, false)}
+            ${barMeter('Month', s.words.month, wordMax, false)}
+          </div>
           ${statCard(s.words.lifetime.toLocaleString(), 'All time')}
         </div>
       </section>
@@ -380,6 +430,10 @@ async function refreshStatistics() {
           ${statCard(s.recordings.toLocaleString(), 'Total recordings')}
           ${statCard(fmtDuration(s.longest_recording_sec), 'Longest recording')}
           ${statCard(fmtDuration(s.avg_recording_sec), 'Average recording')}
+          <div class="stat-card chart-card">
+            <div class="chart-title">Activity pulse</div>
+            ${sparkBars(latencyBuckets)}
+          </div>
           ${statCard(fmtDuration(s.total_transcription_sec), 'Total transcription time')}
           ${statCard(`${s.avg_transcription_latency_ms} ms`, 'Average transcription latency')}
           ${statCard(s.clarifications.toLocaleString(), 'Clarify requests')}
@@ -389,6 +443,84 @@ async function refreshStatistics() {
   } catch (e) {
     grid.innerHTML = '<div class="empty-hint">Statistics unavailable while the backend starts.</div>';
   }
+}
+
+// ---------- Train ----------
+function trainingItem(item) {
+  const kind = item.kind === 'trigger' ? 'Trigger' : 'Word';
+  const heard = item.heard ? `Parakeet heard: ${item.heard}` : 'No audio sample captured';
+  return `<div class="training-item">
+    <div><strong>${escapeHtml(kind)}</strong><span>${escapeHtml(item.spoken || '')}</span></div>
+    <div><b>${escapeHtml(item.output || '')}</b><small>${escapeHtml(heard)}</small></div>
+  </div>`;
+}
+
+async function refreshTrain() {
+  try {
+    const adaptation = await window.afk.call('get_adaptation', {});
+    $('#trainSummary').textContent = `${adaptation.training_count || 0} samples`;
+    const items = (adaptation.training || []).slice(-8).reverse();
+    $('#trainingList').innerHTML = items.length
+      ? items.map(trainingItem).join('')
+      : '<div class="empty-hint">No training samples yet.</div>';
+  } catch (e) {
+    $('#trainSummary').textContent = 'starting';
+    $('#trainingList').innerHTML = '<div class="empty-hint">Training unavailable while the backend starts.</div>';
+  }
+}
+
+async function startTrainSample(kind) {
+  const isTrigger = kind === 'trigger';
+  const spoken = (isTrigger ? $('#trainTriggerInput') : $('#trainWordInput')).value.trim();
+  const output = (isTrigger ? $('#trainOutputInput').value.trim() : spoken);
+  const status = isTrigger ? $('#trainTriggerStatus') : $('#trainWordStatus');
+  if (!spoken || !output) {
+    status.textContent = isTrigger ? 'Add both the spoken trigger and output first.' : 'Type the word or phrase first.';
+    return;
+  }
+  try {
+    activeTrainingKind = kind;
+    status.textContent = 'Recording... say it naturally once.';
+    await window.afk.call('start_training_sample', {
+      kind,
+      spoken,
+      output,
+      device: $('#micSelect') ? ($('#micSelect').value || null) : null
+    });
+  } catch (e) {
+    activeTrainingKind = null;
+    status.textContent = `Training failed to start: ${e.message || e}`;
+  }
+}
+
+async function finishTrainSample(kind) {
+  const status = kind === 'trigger' ? $('#trainTriggerStatus') : $('#trainWordStatus');
+  try {
+    status.textContent = 'Transcribing sample and saving correction...';
+    const res = await window.afk.call('finish_training_sample', {});
+    activeTrainingKind = null;
+    const heard = (res && res.training && res.training.heard) || (res && res.text) || '';
+    status.textContent = heard ? `Saved. Parakeet heard "${heard}".` : 'Saved, but no speech was detected in that sample.';
+    refreshTrain();
+    refreshHomeStats();
+  } catch (e) {
+    activeTrainingKind = null;
+    status.textContent = `Training failed: ${e.message || e}`;
+  }
+}
+
+function initTrainControls() {
+  $('#trainWordStartBtn').addEventListener('click', () => startTrainSample('word'));
+  $('#trainWordFinishBtn').addEventListener('click', () => finishTrainSample('word'));
+  $('#trainTriggerStartBtn').addEventListener('click', () => startTrainSample('trigger'));
+  $('#trainTriggerFinishBtn').addEventListener('click', () => finishTrainSample('trigger'));
+  $('#clearTrainingBtn').addEventListener('click', async () => {
+    await window.afk.call('clear_adaptation', {});
+    $('#trainWordStatus').textContent = 'Training memory cleared.';
+    $('#trainTriggerStatus').textContent = 'Training memory cleared.';
+    refreshTrain();
+    refreshHomeStats();
+  });
 }
 
 // ---------- Settings ----------
@@ -405,51 +537,11 @@ function toggleHtml(id, checked) {
   return `<label class="switch" aria-label="${escapeHtml(id)}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="slider"></span></label>`;
 }
 
-function learningPanel(adaptation) {
-  const phrases = adaptation.calibration_phrases || [];
-  const phrase = phrases[(adaptation.calibration_count || 0) % Math.max(phrases.length, 1)] || '';
-  return `<section class="learning-panel" aria-label="Voice learning">
-    <div class="learning-head">
-      <div>
-        <span class="section-kicker">Voice learning</span>
-        <h2>Personal corrections</h2>
-      </div>
-      <div class="learning-counts">
-        <span>${escapeHtml(adaptation.correction_count || 0)} corrections</span>
-        <span>${escapeHtml(adaptation.calibration_count || 0)} samples</span>
-      </div>
-    </div>
-    <div class="learning-grid">
-      <div class="learning-box">
-        <span class="setting-name">Calibration sentence</span>
-        <p id="calibrationPhrase">${escapeHtml(phrase)}</p>
-        <div class="record-actions">
-          <button class="btn" id="startCalibrationBtn">Record sentence</button>
-          <button class="btn btn-primary" id="finishCalibrationBtn">Finish and learn</button>
-        </div>
-      </div>
-      <div class="learning-box">
-        <span class="setting-name">Manual correction</span>
-        <div class="correction-grid">
-          <input type="text" id="learnHeard" placeholder="AFK heard this..." spellcheck="false">
-          <input type="text" id="learnIntended" placeholder="I meant this..." spellcheck="false">
-        </div>
-        <div class="record-actions">
-          <button class="btn btn-primary" id="learnManualBtn">Learn correction</button>
-          <button class="btn btn-quiet" id="clearLearningBtn">Clear learning</button>
-        </div>
-      </div>
-    </div>
-    <div class="setting-status" id="learningStatus">Tip: after fixing a dictation in any app, select the corrected text and press ${escapeHtml(DEFAULT_HOTKEYS.learn_correction)}.</div>
-  </section>`;
-}
-
 async function refreshSettings() {
   const list = $('#settingsList');
   try {
     const cfg = await window.afk.call('get_settings', {});
     _settingsCache = cfg;
-    const adaptation = await window.afk.call('get_adaptation', {});
     const mics = (await window.afk.call('list_microphones', {})).devices || [];
     const micOpts = ['<option value="">System default</option>']
       .concat(mics.map((d) =>
@@ -465,12 +557,14 @@ async function refreshSettings() {
       settingRow('Launch minimized', 'Open directly into the system tray', toggleHtml('set-launch_minimized', cfg.launch_minimized)) +
       settingRow('Auto-paste', 'Paste dictation into the active app', toggleHtml('set-auto_paste', cfg.auto_paste)) +
       settingRow('Auto-clarify', 'Run grammar cleanup before paste', toggleHtml('set-auto_clarify', cfg.auto_clarify)) +
+      settingRow('Capitalization', 'Capitalize transcripts automatically', toggleHtml('set-auto_capitalization', cfg.auto_capitalization !== false)) +
+      settingRow('Punctuation', 'Keep punctuation from speech recognition', toggleHtml('set-auto_punctuation', cfg.auto_punctuation !== false)) +
+      settingRow('Training corrections', 'Apply words and triggers from the Train tab', toggleHtml('set-training_corrections', cfg.training_corrections !== false)) +
       settingRow('Word-count threshold', 'Use the long model above this number of words', `<input type="number" id="set-word_count_threshold" min="1" max="500" value="${escapeHtml(cfg.word_count_threshold)}">`) +
       settingRow('Push-to-talk hotkey', 'Hold to record', `<input type="text" class="hotkey-input" id="hk-push_to_talk" value="${escapeHtml(hk.push_to_talk || '')}" spellcheck="false">`) +
       settingRow('Toggle hotkey', 'Press once to start or stop', `<input type="text" class="hotkey-input" id="hk-toggle" value="${escapeHtml(hk.toggle || '')}" spellcheck="false">`) +
       settingRow('Clarify hotkey', 'Polish selected text or clipboard', `<input type="text" class="hotkey-input" id="hk-clarify" value="${escapeHtml(hk.clarify || '')}" spellcheck="false">`) +
       settingRow('Learn correction hotkey', 'Select corrected text after dictation', `<input type="text" class="hotkey-input" id="hk-learn_correction" value="${escapeHtml(hk.learn_correction || '')}" spellcheck="false">`) +
-      learningPanel(adaptation) +
       settingRow('Logging', 'Write diagnostic logs to disk', toggleHtml('set-logging', cfg.logging)) +
       settingRow('Developer mode', 'Enable extra diagnostics', toggleHtml('set-developer_mode', cfg.developer_mode)) +
       `<div class="settings-actions"><button class="btn" id="resetStatsBtn">Reset statistics</button></div>`;
@@ -491,6 +585,9 @@ function wireSettingControls() {
   patchToggle('set-launch_minimized', 'launch_minimized');
   patchToggle('set-auto_paste', 'auto_paste');
   patchToggle('set-auto_clarify', 'auto_clarify');
+  patchToggle('set-auto_capitalization', 'auto_capitalization');
+  patchToggle('set-auto_punctuation', 'auto_punctuation');
+  patchToggle('set-training_corrections', 'training_corrections');
   patchToggle('set-logging', 'logging');
   patchToggle('set-developer_mode', 'developer_mode');
 
@@ -502,45 +599,12 @@ function wireSettingControls() {
 
   const threshold = $('#set-word_count_threshold');
   threshold.addEventListener('change', () => {
-    saveSetting('word_count_threshold', parseInt(threshold.value, 10) || 60);
+    saveSetting('word_count_threshold', parseInt(threshold.value, 10) || 100);
   });
 
   ['push_to_talk', 'toggle', 'clarify', 'learn_correction'].forEach((k) => {
     const el = $('#hk-' + k);
     el.addEventListener('change', saveHotkeys);
-  });
-
-  const status = $('#learningStatus');
-  $('#learnManualBtn').addEventListener('click', async () => {
-    const heard = $('#learnHeard').value.trim();
-    const intended = $('#learnIntended').value.trim();
-    if (!intended) {
-      status.textContent = 'Add the intended correction first.';
-      return;
-    }
-    const res = await window.afk.call('learn_correction', { heard, intended, source: 'settings' });
-    status.textContent = res.ok ? 'Learned. Future transcripts will use this correction.' : `Nothing learned: ${res.reason || 'unchanged'}.`;
-    refreshSettings();
-  });
-
-  $('#startCalibrationBtn').addEventListener('click', async () => {
-    const expected = $('#calibrationPhrase').textContent.trim();
-    status.textContent = 'Recording calibration sentence...';
-    await window.afk.call('start_calibration', { expected });
-  });
-
-  $('#finishCalibrationBtn').addEventListener('click', async () => {
-    status.textContent = 'Learning calibration sample...';
-    const res = await window.afk.call('finish_calibration', {});
-    const heard = (res && res.raw_text) || (res && res.text) || '';
-    status.textContent = heard ? `Learned from: "${heard}"` : 'No speech detected for this calibration sample.';
-    refreshSettings();
-  });
-
-  $('#clearLearningBtn').addEventListener('click', async () => {
-    await window.afk.call('clear_adaptation', {});
-    status.textContent = 'Voice learning cleared.';
-    refreshSettings();
   });
 
   $('#resetStatsBtn').addEventListener('click', async () => {
@@ -601,6 +665,7 @@ function initEvents() {
         showTranscription(data && data.text, data && data.message);
         $('#recordStatus').textContent = 'Idle';
         refreshAsrStatus();
+        refreshHomeStats();
         break;
       case 'clarify_done':
         if (data && data.text) {
@@ -612,9 +677,20 @@ function initEvents() {
         break;
       case 'statistics_updated':
         if ($('#page-statistics').classList.contains('active')) refreshStatistics();
+        refreshHomeStats();
         break;
       case 'correction_learned':
         $('#recordStatus').textContent = data && data.ok ? 'Learned correction' : 'Learning skipped';
+        refreshTrain();
+        refreshHomeStats();
+        break;
+      case 'training_sample_saved':
+        if ($('#page-train').classList.contains('active')) refreshTrain();
+        refreshHomeStats();
+        break;
+      case 'adaptation_updated':
+        if ($('#page-train').classList.contains('active')) refreshTrain();
+        refreshHomeStats();
         break;
       default:
         break;
@@ -632,6 +708,10 @@ function setRecording(on) {
   btn.classList.toggle('recording', on);
   btn.textContent = on ? 'Stop and transcribe' : 'Start recording';
   btn.disabled = false;
+  if (!on && activeTrainingKind) {
+    const status = activeTrainingKind === 'trigger' ? $('#trainTriggerStatus') : $('#trainWordStatus');
+    if (status) status.textContent = 'Recording stopped. Finish to save this sample.';
+  }
 
   if (on) {
     recStart = Date.now();
@@ -670,6 +750,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   initNav();
   initEvents();
   initEditableHotkeyHandling();
+  initTrainControls();
   $('#recordBtn').addEventListener('click', toggleRecord);
   $('#loadAsrBtn').addEventListener('click', loadAsrModel);
   $('#micSelect').addEventListener('change', onMicChange);
@@ -682,6 +763,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   await refreshMicrophones();
   await refreshAsrStatus();
   await refreshClarifyStatus();
+  await refreshHomeStats();
+  await refreshTrain();
 
   setTimeout(() => {
     refreshBackendInfo();

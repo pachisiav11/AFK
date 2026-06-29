@@ -8,6 +8,7 @@ backend API easy to audit and version.
 
 import os
 import platform
+import re
 import sys
 import threading
 from typing import Any, Callable, Dict
@@ -55,6 +56,7 @@ class AFKApp:
         self._last_dictation_text = ""
         self._last_inserted_text = ""
         self._calibration_expected = ""
+        self._train_pending: Dict[str, Any] = {}
 
         self._methods: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_core()
@@ -229,13 +231,25 @@ class AFKApp:
                 }
             )
         if result.get("text"):
-            adapted, changed, applied = self.adaptation.apply(result.get("text", ""))
+            if s.get("training_corrections", True):
+                adapted, changed, applied = self.adaptation.apply(result.get("text", ""))
+            else:
+                adapted, changed, applied = result.get("text", ""), False, []
             if changed:
                 result["raw_text"] = result.get("text", "")
                 result["text"] = adapted
                 result["adapted"] = True
                 result["adaptations"] = applied
                 logutil.info(f"Applied {len(applied)} learned correction(s)")
+            formatted = _format_transcript_text(
+                result.get("text", ""),
+                capitalization=s.get("auto_capitalization", True),
+                punctuation=s.get("auto_punctuation", True),
+            )
+            if formatted != result.get("text", ""):
+                result.setdefault("raw_text", result.get("text", ""))
+                result["text"] = formatted
+                result["formatted"] = True
             self._last_dictation_text = result.get("text", "")
         # Record usage stats (words dictated, recording length, transcription latency).
         try:
@@ -478,6 +492,8 @@ class AFKApp:
         self.register("calibration_phrases", lambda p: {"phrases": self.adaptation.snapshot()["calibration_phrases"]})
         self.register("start_calibration", self._start_calibration)
         self.register("finish_calibration", self._finish_calibration)
+        self.register("start_training_sample", self._start_training_sample)
+        self.register("finish_training_sample", self._finish_training_sample)
 
     def _learn_correction_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
         intended = params.get("intended", "")
@@ -527,6 +543,33 @@ class AFKApp:
         result = self.adaptation.learn_correction(heard, intended, source="hotkey")
         emit_event("correction_learned", result)
 
+    def _start_training_sample(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        kind = params.get("kind") if params.get("kind") in {"word", "trigger"} else "word"
+        spoken = (params.get("spoken") or "").strip()
+        output = (params.get("output") or spoken).strip()
+        if not spoken or not output:
+            raise RpcError("start_training_sample requires 'spoken' and 'output'")
+        self._train_pending = {"kind": kind, "spoken": spoken, "output": output}
+        return self.start_recording(params)
+
+    def _finish_training_sample(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        if not self._train_pending:
+            raise RpcError("No active training sample")
+        result = self.stop_recording({})
+        pending = self._train_pending
+        self._train_pending = {}
+        heard = result.get("raw_text") or result.get("text", "")
+        learned = self.adaptation.record_training(
+            pending.get("kind", "word"),
+            pending.get("spoken", ""),
+            pending.get("output", ""),
+            heard,
+        )
+        out = {**result, "training": learned}
+        emit_event("adaptation_updated", self.adaptation.snapshot())
+        emit_event("training_sample_saved", learned)
+        return out
+
 
 def _empty_transcription(duration: float, reason: str, message: str = "", **extra) -> Dict[str, Any]:
     return {
@@ -547,3 +590,16 @@ def _silence_hallucination(text: str, raw_levels: Dict[str, Any]) -> bool:
         float(raw_levels.get("rms", 0.0)) < 0.0008
         and float(raw_levels.get("peak", 0.0)) < 0.006
     )
+
+
+def _format_transcript_text(text: str, *, capitalization: bool = True, punctuation: bool = True) -> str:
+    out = re.sub(r"\s+", " ", text or "").strip()
+    if not out:
+        return ""
+    if not punctuation:
+        out = re.sub(r"[.,!?;:]+", "", out)
+    if not capitalization:
+        return out.lower()
+    if out:
+        out = out[:1].upper() + out[1:]
+    return out

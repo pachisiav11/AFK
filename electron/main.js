@@ -41,6 +41,11 @@ let isQuitting = false;
 let overlayHideTimer = null;
 
 const DEV = !!process.env.AFK_DEV;
+const APP_USER_MODEL_ID = 'com.afk.app';
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
 
 function createWindow() {
   if (mainWindow) {
@@ -57,7 +62,7 @@ function createWindow() {
     show: false,
     backgroundColor: '#0f1115',
     title: 'AFK',
-    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -274,7 +279,15 @@ function registerIpc() {
   // Generic pass-through to the Python backend.
   ipcMain.handle('afk:call', async (_evt, { method, params }) => {
     if (!bridge) throw new Error('Backend not initialised');
-    const longCalls = new Set(['load_asr', 'stop_recording', 'finish_recording', 'transcribe', 'clarify']);
+    const longCalls = new Set([
+      'load_asr',
+      'stop_recording',
+      'finish_recording',
+      'finish_training_sample',
+      'finish_calibration',
+      'transcribe',
+      'clarify'
+    ]);
     return bridge.call(method, params || {}, longCalls.has(method) ? 10 * 60 * 1000 : undefined);
   });
 
