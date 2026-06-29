@@ -30,6 +30,7 @@
     "appId": "com.afk.app",
     "productName": "AFK",
     "executableName": "AFK",
+    "compression": "store",
     "directories": {
       "output": "installer/dist",
       "buildResources": "assets"
@@ -63,6 +64,7 @@
       }
     ],
     "win": {
+      "compression": "store",
       "signAndEditExecutable": false,
       "target": [
         {
@@ -80,7 +82,8 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AFK"
+      "shortcutName": "AFK",
+      "useZip": true
     }
   }
 }
