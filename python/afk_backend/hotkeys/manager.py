@@ -90,7 +90,7 @@ def _norm(key) -> Tuple[str, str]:
 
 class HotkeyManager:
     def __init__(self, callbacks: Dict[str, Callable[[], None]]):
-        """callbacks: keys 'ptt_start','ptt_stop','toggle','clarify'."""
+        """callbacks: keys 'ptt_start','ptt_stop','toggle','clarify','cancel'."""
         self._cb = callbacks
         self._listener = None
         self._lock = threading.Lock()
@@ -100,6 +100,7 @@ class HotkeyManager:
         self._main_down: Optional[str] = None
         self._ptt_on = False
         self._fired_edge = False  # debounce edge-triggered actions per press
+        self._esc_fired = False  # debounce Escape (cancel) per press
         self._injecting = False
 
     # ---- configuration ----
@@ -153,6 +154,13 @@ class HotkeyManager:
             self._pressed_mods.add(token)
             self._evaluate_ptt()
             return
+        # Escape always cancels whatever's in progress (dictation or
+        # Clarify), regardless of which modifiers happen to be held.
+        if token == "esc":
+            if not self._esc_fired:
+                self._esc_fired = True
+                self._fire("cancel")
+            return
         # main key down
         self._main_down = token
         self._evaluate_ptt()
@@ -165,6 +173,9 @@ class HotkeyManager:
         if kind == "mod":
             self._pressed_mods.discard(token)
             self._evaluate_ptt()
+            return
+        if token == "esc":
+            self._esc_fired = False
             return
         if self._main_down == token:
             self._main_down = None

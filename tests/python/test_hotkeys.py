@@ -45,6 +45,7 @@ class TestManager(unittest.TestCase):
                 "ptt_stop": lambda: self.events.append("ptt_stop"),
                 "toggle": lambda: self.events.append("toggle"),
                 "clarify": lambda: self.events.append("clarify"),
+                "cancel": lambda: self.events.append("cancel"),
             }
         )
         self.mgr.set_bindings(
@@ -99,6 +100,28 @@ class TestManager(unittest.TestCase):
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, [])
         self.mgr.set_injecting(False)
+
+    def test_escape_fires_cancel(self):
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertEqual(self.events, ["cancel"])
+        self.mgr._on_release(keyboard.Key.esc)
+
+    def test_escape_fires_once_per_press(self):
+        self.mgr._on_press(keyboard.Key.esc)
+        self.mgr._on_press(keyboard.Key.esc)  # auto-repeat shouldn't re-fire
+        self.assertEqual(self.events.count("cancel"), 1)
+        self.mgr._on_release(keyboard.Key.esc)
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertEqual(self.events.count("cancel"), 2)
+
+    def test_escape_cancels_regardless_of_held_modifiers(self):
+        # e.g. user is mid-push-to-talk (holding Ctrl+Space) and hits Escape.
+        self.mgr._on_press(CTRL)
+        self.mgr._on_press(SPACE)
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertIn("cancel", self.events)
+        self.assertNotIn("clarify", self.events)
+        self.assertNotIn("toggle", self.events)
 
 
 if __name__ == "__main__":
