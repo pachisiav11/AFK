@@ -23,6 +23,7 @@ from .hotkeys import HotkeyManager
 from .clarify.engine import ClarifyEngine
 from .statistics import StatsStore
 from .adaptation import AdaptationStore
+from .history import HistoryStore
 
 
 class AFKApp:
@@ -53,6 +54,7 @@ class AFKApp:
         # Phase 5 service.
         self.statistics = StatsStore()
         self.adaptation = AdaptationStore()
+        self.history = HistoryStore()
         self._last_dictation_text = ""
         self._last_inserted_text = ""
         self._calibration_expected = ""
@@ -65,6 +67,7 @@ class AFKApp:
         self._register_clarify()
         self._register_statistics()
         self._register_adaptation()
+        self._register_history()
 
     # ---- lifecycle ----
     def on_started(self) -> None:
@@ -379,6 +382,7 @@ class AFKApp:
             result["action"] = self._paste(before)
             result["inserted"] = True
             self._last_inserted_text = before
+        self._record_history(text, result.get("action", ""))
         return result
 
     # ---- hotkey callbacks (run on the listener thread; offload heavy work) ----
@@ -494,6 +498,7 @@ class AFKApp:
         self.register("finish_calibration", self._finish_calibration)
         self.register("start_training_sample", self._start_training_sample)
         self.register("finish_training_sample", self._finish_training_sample)
+        self.register("delete_training_sample", self._delete_training_sample)
 
     def _learn_correction_method(self, params: Dict[str, Any]) -> Dict[str, Any]:
         intended = params.get("intended", "")
@@ -504,6 +509,11 @@ class AFKApp:
 
     def _clear_adaptation(self, _params: Dict[str, Any]) -> Dict[str, Any]:
         snapshot = self.adaptation.clear()
+        emit_event("adaptation_updated", snapshot)
+        return snapshot
+
+    def _delete_training_sample(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        snapshot = self.adaptation.delete_training(params.get("id", ""))
         emit_event("adaptation_updated", snapshot)
         return snapshot
 
@@ -569,6 +579,33 @@ class AFKApp:
         emit_event("adaptation_updated", self.adaptation.snapshot())
         emit_event("training_sample_saved", learned)
         return out
+
+    # ---- transcription history methods ----
+    def _register_history(self) -> None:
+        self.register("get_transcription_history", self._get_transcription_history)
+        self.register("delete_transcription_history", self._delete_transcription_history)
+        self.register("clear_transcription_history", self._clear_transcription_history)
+
+    def _record_history(self, text: str, action: str = "") -> None:
+        try:
+            result = self.history.record(text, action=action)
+            if result.get("ok"):
+                emit_event("history_updated", self.history.snapshot())
+        except Exception as exc:  # noqa: BLE001
+            logutil.warn(f"history record failed: {exc}")
+
+    def _get_transcription_history(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        return self.history.snapshot(params.get("limit", 24))
+
+    def _delete_transcription_history(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        snapshot = self.history.delete(params.get("id", ""))
+        emit_event("history_updated", snapshot)
+        return snapshot
+
+    def _clear_transcription_history(self, _params: Dict[str, Any]) -> Dict[str, Any]:
+        snapshot = self.history.clear()
+        emit_event("history_updated", snapshot)
+        return snapshot
 
 
 def _empty_transcription(duration: float, reason: str, message: str = "", **extra) -> Dict[str, Any]:

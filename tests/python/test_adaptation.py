@@ -63,6 +63,21 @@ class TestAdaptationStore(unittest.TestCase):
         self.assertEqual(text, "paradoxical_duck")
         self.assertEqual(store.snapshot()["trigger_count"], 1)
 
+    def test_delete_training_removes_saved_sample_and_correction(self):
+        from afk_backend.adaptation import AdaptationStore
+
+        store = AdaptationStore()
+        res = store.record_training("word", "sohum", "Sohum", "sohum")
+        self.assertTrue(res["ok"])
+
+        snapshot = store.delete_training(res["id"])
+        self.assertTrue(snapshot["ok"])
+        self.assertEqual(snapshot["training_count"], 0)
+
+        text, changed, _applied = store.apply("hello sohum")
+        self.assertFalse(changed)
+        self.assertEqual(text, "hello sohum")
+
 
 if __name__ == "__main__":
     unittest.main()

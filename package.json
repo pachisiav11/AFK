@@ -29,6 +29,7 @@
   "build": {
     "appId": "com.afk.app",
     "productName": "AFK",
+    "executableName": "AFK",
     "directories": {
       "output": "installer/dist",
       "buildResources": "assets"

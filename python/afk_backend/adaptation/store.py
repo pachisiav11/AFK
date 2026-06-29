@@ -11,6 +11,7 @@ import os
 import re
 import tempfile
 import threading
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
@@ -140,26 +141,62 @@ class AdaptationStore:
             "reason": "missing_heard",
         }
         with self._lock:
-            self._data.setdefault("training", []).append(
-                {
-                    "kind": kind,
-                    "spoken": spoken,
-                    "output": output,
-                    "heard": heard,
-                    "created_at": _now(),
-                    "learned": bool(learn_result.get("ok")),
-                }
-            )
+            item = {
+                "id": uuid.uuid4().hex,
+                "kind": kind,
+                "spoken": spoken,
+                "output": output,
+                "heard": heard,
+                "created_at": _now(),
+                "learned": bool(learn_result.get("ok")),
+            }
+            self._data.setdefault("training", []).append(item)
             self._data["setup_complete"] = True
             self._save()
         return {
             "ok": True,
+            "id": item["id"],
             "kind": kind,
             "spoken": spoken,
             "output": output,
             "heard": heard,
             "learn_result": learn_result,
         }
+
+    def delete_training(self, item_id: str) -> Dict[str, Any]:
+        item_id = str(item_id or "")
+        found = False
+        with self._lock:
+            training = self._data.setdefault("training", [])
+            match = None
+            remaining = []
+            for item in training:
+                if item.get("id") == item_id:
+                    match = item
+                else:
+                    remaining.append(item)
+            if match is None:
+                found = False
+            else:
+                found = True
+
+                kind = match.get("kind", "word")
+                source = f"train_{kind}"
+                heard_key = _norm(match.get("heard", ""))
+                spoken_key = _norm(match.get("spoken", ""))
+                output_key = _norm(match.get("output", ""))
+                self._data["training"] = remaining
+                self._data["corrections"] = [
+                    c for c in self._data.get("corrections", [])
+                    if not (
+                        c.get("source") == source
+                        and _norm(c.get("intended", "")) == output_key
+                        and _norm(c.get("heard", "")) in {heard_key, spoken_key}
+                    )
+                ]
+                self._save()
+        snapshot = self.snapshot()
+        return {"ok": found, **({} if found else {"reason": "not_found"}), **snapshot}
 
     def clear(self) -> Dict[str, Any]:
         with self._lock:

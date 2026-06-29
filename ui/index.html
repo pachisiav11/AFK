@@ -49,7 +49,7 @@
         <header class="page-head">
           <div>
             <h1>Dictation</h1>
-            <p class="page-sub">Local speech, cleanup, and paste in one focused console.</p>
+            <p class="page-sub">Local speech, cleanup, history, and training in one focused console.</p>
           </div>
           <div class="head-status">
             <span class="status-pill" id="asrStatus">Model: ...</span>
@@ -58,28 +58,12 @@
         </header>
 
         <div class="home-dashboard">
-          <section class="card command-card" aria-labelledby="recordTitle">
-            <div class="record-state compact" id="recordState">
-              <div class="record-text">
-                <span class="section-kicker" id="recordTitle">Voice input</span>
-                <span class="record-status" id="recordStatus">Idle</span>
-                <span class="record-timer" id="recordTimer">00:00</span>
-              </div>
-              <div class="record-orb" id="recordOrb" aria-hidden="true">
-                <span></span><span></span><span></span>
-              </div>
-            </div>
-            <div class="record-actions">
-              <button class="btn btn-primary" id="recordBtn">Start recording</button>
-              <button class="btn btn-quiet" id="loadAsrBtn">Load speech model</button>
-            </div>
-            <div class="transcription compact-transcript" id="transcription">
-              <span class="placeholder">Your latest transcription will appear here...</span>
-            </div>
-          </section>
-
           <section class="home-stats" id="homeStats" aria-label="Key statistics">
             <div class="empty-hint">Statistics will appear after your first dictation.</div>
+          </section>
+
+          <section class="card home-chart" id="homeChart" aria-label="Dictation graph">
+            <div class="empty-hint">Your activity graph will appear after your first dictation.</div>
           </section>
 
           <section class="card info-card" aria-label="Current setup">
@@ -109,17 +93,13 @@
             </div>
           </section>
 
-          <section class="card clarify-card" aria-labelledby="clarifyTitle">
-            <div class="card-title" id="clarifyTitle">
-              <span>Clarify</span>
-              <span class="status-pill" id="clarifyMeta"></span>
+          <section class="card history-card" aria-labelledby="historyTitle">
+            <div class="card-title" id="historyTitle">
+              <span>Previous transcriptions</span>
+              <button class="btn btn-quiet" id="clearHistoryBtn">Clear history</button>
             </div>
-            <textarea id="clarifyInput" class="clarify-input" rows="3" placeholder="Type or paste text to polish..."></textarea>
-            <div class="record-actions">
-              <button class="btn" id="clarifyBtn">Clarify</button>
-            </div>
-            <div class="transcription clarify-output" id="clarifyOutput">
-              <span class="placeholder">Polished text appears here...</span>
+            <div class="history-list" id="historyList">
+              <div class="empty-hint">No transcriptions yet.</div>
             </div>
           </section>
         </div>

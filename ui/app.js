@@ -25,6 +25,11 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function setText(sel, value) {
+  const el = $(sel);
+  if (el) el.textContent = value;
+}
+
 // ---------- Navigation ----------
 function initNav() {
   $$('.nav-item').forEach((btn) => {
@@ -120,18 +125,22 @@ async function refreshAsrStatus() {
 
 async function loadAsrModel() {
   const btn = $('#loadAsrBtn');
-  btn.disabled = true;
-  btn.textContent = 'Loading...';
-  $('#asrStatus').textContent = 'Speech: loading';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+  }
+  setText('#asrStatus', 'Speech: loading');
   try {
     const res = await window.afk.call('load_asr', {});
-    $('#asrStatus').textContent = `Speech: ${res.status || 'ready'}`;
+    setText('#asrStatus', `Speech: ${res.status || 'ready'}`);
   } catch (e) {
-    $('#asrStatus').textContent = 'Speech: error';
+    setText('#asrStatus', 'Speech: error');
     showTranscription(`ASR load failed: ${e.message || e}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Load speech model';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Load speech model';
+    }
   }
 }
 
@@ -142,31 +151,37 @@ async function toggleRecord() {
       const device = $('#micSelect').value || null;
       await window.afk.call('start_recording', { device });
       isRecording = true;
-      btn.textContent = 'Stop and transcribe';
-      btn.classList.add('recording');
+      if (btn) {
+        btn.textContent = 'Stop and transcribe';
+        btn.classList.add('recording');
+      }
       return;
     }
 
-    btn.textContent = 'Transcribing...';
-    btn.disabled = true;
+    if (btn) {
+      btn.textContent = 'Transcribing...';
+      btn.disabled = true;
+    }
     const res = await window.afk.call('finish_recording', {});
     isRecording = false;
-    btn.classList.remove('recording');
+    if (btn) btn.classList.remove('recording');
     if (res && res.text) {
       const action = res.action === 'pasted' ? 'Pasted.' : 'Copied to clipboard.';
       showTranscription(res.text, action);
-      $('#recordStatus').textContent = res.action === 'pasted' ? 'Pasted' : 'Copied';
+      setText('#recordStatus', res.action === 'pasted' ? 'Pasted' : 'Copied');
     } else if (res && res.message) {
       showTranscription('', res.message);
     }
   } catch (e) {
     isRecording = false;
-    btn.classList.remove('recording');
+    if (btn) btn.classList.remove('recording');
     showTranscription(`Recording failed: ${e.message || e}`);
   } finally {
     if (!isRecording) {
-      btn.disabled = false;
-      btn.textContent = 'Start recording';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Start recording';
+      }
     }
     refreshAsrStatus();
   }
@@ -194,22 +209,29 @@ async function refreshClarifyStatus() {
 
 async function clarifyText() {
   const btn = $('#clarifyBtn');
-  const input = $('#clarifyInput').value.trim();
+  const inputEl = $('#clarifyInput');
+  const input = inputEl ? inputEl.value.trim() : '';
   if (!input) return;
-  btn.disabled = true;
-  btn.textContent = 'Clarifying...';
-  $('#clarifyMeta').textContent = '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Clarifying...';
+  }
+  setText('#clarifyMeta', '');
   try {
     const res = await window.afk.call('clarify', { text: input });
-    $('#clarifyOutput').textContent = res.text || '(no output)';
+    setText('#clarifyOutput', res.text || '(no output)');
     const model = res.model && res.model !== 'none' ? res.model : 'no model';
-    $('#clarifyMeta').textContent = `${res.words} words / ${model}` +
-      (res.latency_ms ? ` / ${res.latency_ms} ms` : '');
+    setText(
+      '#clarifyMeta',
+      `${res.words} words / ${model}` + (res.latency_ms ? ` / ${res.latency_ms} ms` : '')
+    );
   } catch (e) {
-    $('#clarifyOutput').textContent = `Clarify failed: ${e.message || e}`;
+    setText('#clarifyOutput', `Clarify failed: ${e.message || e}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Clarify';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Clarify';
+    }
     refreshClarifyStatus();
   }
 }
@@ -371,6 +393,7 @@ function sparkBars(values) {
 
 async function refreshHomeStats() {
   const box = $('#homeStats');
+  const chart = $('#homeChart');
   if (!box) return;
   try {
     const [s, adaptation] = await Promise.all([
@@ -383,9 +406,76 @@ async function refreshHomeStats() {
       homeStatCard(s.words.week.toLocaleString(), 'Words this week') +
       homeStatCard(saved, 'Typing saved today', true) +
       homeStatCard((adaptation.training_count || 0).toLocaleString(), 'Training samples');
+    if (chart) {
+      const wordMax = Math.max(1, s.words.today, s.words.week, s.words.month, s.words.lifetime);
+      const spark = [
+        s.words.today || 0,
+        s.words.week || 0,
+        s.words.month || 0,
+        s.recordings || 0,
+        Math.max(1, Math.round((s.avg_transcription_latency_ms || 0) / 100)),
+        adaptation.trigger_count || 0
+      ];
+      chart.innerHTML =
+        `<div class="chart-title">Dictation pulse</div>
+        ${sparkBars(spark)}
+        <div class="home-bars">
+          ${barMeter('Today', s.words.today, wordMax, true)}
+          ${barMeter('Week', s.words.week, wordMax, false)}
+          ${barMeter('Month', s.words.month, wordMax, false)}
+        </div>`;
+    }
   } catch (e) {
     box.innerHTML = '<div class="empty-hint">Statistics unavailable while the backend starts.</div>';
+    if (chart) chart.innerHTML = '<div class="empty-hint">Activity graph unavailable while the backend starts.</div>';
   }
+}
+
+function historyItem(item) {
+  const text = item.text || '';
+  const action = item.action === 'pasted' ? 'Pasted' : (item.action === 'copied' ? 'Copied' : 'Saved');
+  const date = item.created_at ? new Date(item.created_at).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }) : '';
+  return `<div class="history-item" data-history-id="${escapeHtml(item.id || '')}">
+    <div class="history-text">
+      <strong>${escapeHtml(action)}${date ? ` | ${escapeHtml(date)}` : ''}</strong>
+      <span>${escapeHtml(text)}</span>
+    </div>
+    <div class="history-actions">
+      <button class="icon-btn" data-copy-history="${escapeHtml(item.id || '')}" aria-label="Copy transcription">Copy</button>
+      <button class="icon-btn danger" data-delete-history="${escapeHtml(item.id || '')}" aria-label="Delete transcription">Delete</button>
+    </div>
+  </div>`;
+}
+
+async function refreshHistory() {
+  const list = $('#historyList');
+  if (!list) return;
+  try {
+    const history = await window.afk.call('get_transcription_history', { limit: 20 });
+    const items = history.items || [];
+    list.innerHTML = items.length
+      ? items.map(historyItem).join('')
+      : '<div class="empty-hint">No transcriptions yet.</div>';
+  } catch (e) {
+    list.innerHTML = '<div class="empty-hint">History unavailable while the backend starts.</div>';
+  }
+}
+
+async function copyHistoryItem(id) {
+  const item = $(`[data-history-id="${CSS.escape(id)}"] .history-text span`);
+  const text = item ? item.textContent : '';
+  if (!text) return;
+  await window.afk.call('set_clipboard', { text });
+}
+
+async function deleteHistoryItem(id) {
+  await window.afk.call('delete_transcription_history', { id });
+  refreshHistory();
 }
 
 async function refreshStatistics() {
@@ -452,6 +542,7 @@ function trainingItem(item) {
   return `<div class="training-item">
     <div><strong>${escapeHtml(kind)}</strong><span>${escapeHtml(item.spoken || '')}</span></div>
     <div><b>${escapeHtml(item.output || '')}</b><small>${escapeHtml(heard)}</small></div>
+    <button class="icon-btn danger" data-delete-training="${escapeHtml(item.id || '')}" aria-label="Delete training sample">Delete</button>
   </div>`;
 }
 
@@ -518,6 +609,13 @@ function initTrainControls() {
     await window.afk.call('clear_adaptation', {});
     $('#trainWordStatus').textContent = 'Training memory cleared.';
     $('#trainTriggerStatus').textContent = 'Training memory cleared.';
+    refreshTrain();
+    refreshHomeStats();
+  });
+  $('#trainingList').addEventListener('click', async (event) => {
+    const btn = event.target.closest('[data-delete-training]');
+    if (!btn) return;
+    await window.afk.call('delete_training_sample', { id: btn.dataset.deleteTraining });
     refreshTrain();
     refreshHomeStats();
   });
@@ -635,7 +733,7 @@ async function saveHotkeys() {
     _settingsCache = { ...(_settingsCache || {}), hotkeys: updated };
     refreshHotkeys();
   } catch (e) {
-    $('#clarifyMeta').textContent = 'Hotkey save failed';
+    setText('#clarifyMeta', 'Hotkey save failed');
   }
 }
 
@@ -659,19 +757,19 @@ function initEvents() {
         break;
       case 'recording_stopped':
         setRecording(false);
-        $('#recordStatus').textContent = 'Transcribing...';
+        setText('#recordStatus', 'Transcribing...');
         break;
       case 'transcription':
         showTranscription(data && data.text, data && data.message);
-        $('#recordStatus').textContent = 'Idle';
+        setText('#recordStatus', 'Idle');
         refreshAsrStatus();
         refreshHomeStats();
+        refreshHistory();
         break;
       case 'clarify_done':
         if (data && data.text) {
-          $('#clarifyOutput').textContent = data.text;
-          $('#clarifyMeta').textContent = `${data.model || ''}` +
-            (data.latency_ms ? ` / ${data.latency_ms} ms` : '');
+          setText('#clarifyOutput', data.text);
+          setText('#clarifyMeta', `${data.model || ''}` + (data.latency_ms ? ` / ${data.latency_ms} ms` : ''));
         }
         refreshClarifyStatus();
         break;
@@ -680,7 +778,7 @@ function initEvents() {
         refreshHomeStats();
         break;
       case 'correction_learned':
-        $('#recordStatus').textContent = data && data.ok ? 'Learned correction' : 'Learning skipped';
+        setText('#recordStatus', data && data.ok ? 'Learned correction' : 'Learning skipped');
         refreshTrain();
         refreshHomeStats();
         break;
@@ -691,6 +789,9 @@ function initEvents() {
       case 'adaptation_updated':
         if ($('#page-train').classList.contains('active')) refreshTrain();
         refreshHomeStats();
+        break;
+      case 'history_updated':
+        refreshHistory();
         break;
       default:
         break;
@@ -703,11 +804,13 @@ function setRecording(on) {
   const status = $('#recordStatus');
   const btn = $('#recordBtn');
   isRecording = on;
-  orb.classList.toggle('recording', on);
-  status.textContent = on ? 'Recording' : 'Idle';
-  btn.classList.toggle('recording', on);
-  btn.textContent = on ? 'Stop and transcribe' : 'Start recording';
-  btn.disabled = false;
+  if (orb) orb.classList.toggle('recording', on);
+  if (status) status.textContent = on ? 'Recording' : 'Idle';
+  if (btn) {
+    btn.classList.toggle('recording', on);
+    btn.textContent = on ? 'Stop and transcribe' : 'Start recording';
+    btn.disabled = false;
+  }
   if (!on && activeTrainingKind) {
     const status = activeTrainingKind === 'trigger' ? $('#trainTriggerStatus') : $('#trainWordStatus');
     if (status) status.textContent = 'Recording stopped. Finish to save this sample.';
@@ -720,7 +823,7 @@ function setRecording(on) {
       const s = Math.floor((Date.now() - recStart) / 1000);
       const mm = String(Math.floor(s / 60)).padStart(2, '0');
       const ss = String(s % 60).padStart(2, '0');
-      $('#recordTimer').textContent = `${mm}:${ss}`;
+      setText('#recordTimer', `${mm}:${ss}`);
     }, 250);
   } else {
     clearInterval(recTimer);
@@ -732,14 +835,15 @@ async function copyTranscript(text) {
   if (!text) return;
   try {
     await window.afk.call('set_clipboard', { text });
-    $('#recordStatus').textContent = 'Copied';
+    setText('#recordStatus', 'Copied');
   } catch (e) {
-    $('#recordStatus').textContent = 'Idle';
+    setText('#recordStatus', 'Idle');
   }
 }
 
 function showTranscription(text, message) {
   const el = $('#transcription');
+  if (!el) return;
   if (text && message) el.textContent = `${text}\n\n${message}`;
   else if (text) el.textContent = text;
   else if (message) el.textContent = message;
@@ -751,10 +855,24 @@ window.addEventListener('DOMContentLoaded', async () => {
   initEvents();
   initEditableHotkeyHandling();
   initTrainControls();
-  $('#recordBtn').addEventListener('click', toggleRecord);
-  $('#loadAsrBtn').addEventListener('click', loadAsrModel);
-  $('#micSelect').addEventListener('change', onMicChange);
-  $('#clarifyBtn').addEventListener('click', clarifyText);
+  if ($('#recordBtn')) $('#recordBtn').addEventListener('click', toggleRecord);
+  if ($('#loadAsrBtn')) $('#loadAsrBtn').addEventListener('click', loadAsrModel);
+  if ($('#micSelect')) $('#micSelect').addEventListener('change', onMicChange);
+  if ($('#clarifyBtn')) $('#clarifyBtn').addEventListener('click', clarifyText);
+  if ($('#historyList')) {
+    $('#historyList').addEventListener('click', async (event) => {
+      const copy = event.target.closest('[data-copy-history]');
+      const del = event.target.closest('[data-delete-history]');
+      if (copy) await copyHistoryItem(copy.dataset.copyHistory);
+      if (del) await deleteHistoryItem(del.dataset.deleteHistory);
+    });
+  }
+  if ($('#clearHistoryBtn')) {
+    $('#clearHistoryBtn').addEventListener('click', async () => {
+      await window.afk.call('clear_transcription_history', {});
+      refreshHistory();
+    });
+  }
 
   await initAbout();
   await applySavedTheme();
@@ -764,6 +882,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await refreshAsrStatus();
   await refreshClarifyStatus();
   await refreshHomeStats();
+  await refreshHistory();
   await refreshTrain();
 
   setTimeout(() => {
