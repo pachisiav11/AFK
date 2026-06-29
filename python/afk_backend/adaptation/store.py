@@ -72,7 +72,7 @@ class AdaptationStore:
             pattern = re.compile(rf"(?<!\w){re.escape(heard)}(?!\w)", re.IGNORECASE)
 
             def repl(match: re.Match[str]) -> str:
-                replacement = _match_case(match.group(0), intended)
+                replacement = intended if item.get("source") == "train_trigger" else _match_case(match.group(0), intended)
                 applied.append({"heard": match.group(0), "intended": replacement})
                 return replacement
 

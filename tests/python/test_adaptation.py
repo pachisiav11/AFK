@@ -63,6 +63,22 @@ class TestAdaptationStore(unittest.TestCase):
         self.assertEqual(text, "paradoxical_duck")
         self.assertEqual(store.snapshot()["trigger_count"], 1)
 
+    def test_trigger_training_is_case_insensitive_but_preserves_output_case(self):
+        from afk_backend.adaptation import AdaptationStore
+
+        store = AdaptationStore()
+        res = store.record_training(
+            kind="trigger",
+            spoken="my github username is",
+            output="paradoxical_duck",
+            heard="my github username is",
+        )
+        self.assertTrue(res["ok"])
+
+        text, changed, _applied = store.apply("My GitHub Username Is")
+        self.assertTrue(changed)
+        self.assertEqual(text, "paradoxical_duck")
+
     def test_delete_training_removes_saved_sample_and_correction(self):
         from afk_backend.adaptation import AdaptationStore
 
