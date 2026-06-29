@@ -47,7 +47,16 @@ class TestClipboardSelection(unittest.TestCase):
     @patch.object(clipmod.time, "sleep", lambda _s: None)
     def test_paste_or_copy_leaves_transcript_on_clipboard(self):
         cb = FakeClipboard(prior="clipboard text")
-        self.assertEqual(cb.paste_or_copy("hello world"), "pasted")
+        with patch.object(clipmod, "active_text_target", lambda: True):
+            self.assertEqual(cb.paste_or_copy("hello world"), "pasted")
+        self.assertEqual(cb.get_text(), "hello world")
+        self.assertEqual(cb.pasted, 1)
+
+    @patch.object(clipmod.time, "sleep", lambda _s: None)
+    def test_paste_or_copy_reports_copied_without_text_target(self):
+        cb = FakeClipboard(prior="clipboard text")
+        with patch.object(clipmod, "active_text_target", lambda: False):
+            self.assertEqual(cb.paste_or_copy("hello world"), "copied")
         self.assertEqual(cb.get_text(), "hello world")
         self.assertEqual(cb.pasted, 1)
 

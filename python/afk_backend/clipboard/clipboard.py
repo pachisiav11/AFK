@@ -130,9 +130,10 @@ class Clipboard:
         """
         if not text:
             return "empty"
+        had_text_target = active_text_target()
         try:
             self.paste_text(text, restore=False)
-            return "pasted"
+            return "pasted" if had_text_target else "copied"
         except Exception as exc:  # noqa: BLE001
             logutil.warn(f"paste failed; copying instead: {exc}")
             self.set_text(text)

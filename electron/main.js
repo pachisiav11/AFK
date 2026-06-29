@@ -260,7 +260,7 @@ function startBackend() {
       setOverlayState('done', { label: 'Pasted' });
       hideOverlaySoon(900);
     } else if (event === 'copied') {
-      setOverlayState('done', { label: 'Copied' });
+      setOverlayState('done', { label: 'Copied to clipboard' });
       hideOverlaySoon(1200);
     } else if (event === 'clarify_started') {
       setOverlayState('clarifying', { label: 'Clarifying', sub: 'Polishing selected text locally' });
