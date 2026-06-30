@@ -61,10 +61,30 @@ class Clipboard:
         pyperclip.copy(text if text is not None else "")
 
     # ---- synthetic key events ----
+    def _release_stuck_modifiers(self) -> None:
+        """Force Ctrl/Shift/Alt/Win up before we synthesize a combo.
+
+        Hotkeys fire on key-down, so the user's modifier keys (e.g. the
+        Shift in a custom Ctrl+Shift+B clarify binding) are often still
+        physically held when we get here. Sending a synthetic key-up tells
+        the OS those modifiers are no longer down, so our own Ctrl+C/Ctrl+V
+        isn't misread as Ctrl+Shift+C/Ctrl+Shift+V (which many apps don't
+        bind to copy/paste at all). A release for a key that isn't actually
+        down is a harmless no-op.
+        """
+        if self._kb is None:
+            return
+        for mod in (Key.shift, Key.alt, Key.ctrl, Key.cmd):
+            try:
+                self._kb.release(mod)
+            except Exception:
+                pass
+
     def _tap_combo(self, modifier, letter: str) -> None:
         if self._kb is None:
             raise RuntimeError(f"pynput unavailable: {_PYNPUT_ERR}")
         with self._lock:
+            self._release_stuck_modifiers()
             self._kb.press(modifier)
             self._kb.press(letter)
             time.sleep(_KEY_SETTLE)
@@ -77,6 +97,26 @@ class Clipboard:
 
     def _copy(self) -> None:
         self._tap_combo(Key.ctrl, "c")
+
+    def type_text(self, text: str) -> None:
+        """Type `text` directly into the focused window without touching
+        the clipboard at all."""
+        if self._kb is None:
+            raise RuntimeError(f"pynput unavailable: {_PYNPUT_ERR}")
+        with self._lock:
+            self._release_stuck_modifiers()
+            self._kb.type(text)
+
+    def delete_selection(self) -> None:
+        """Delete the current selection (Backspace removes a selection in
+        virtually every text field, same as typing over it)."""
+        if self._kb is None:
+            raise RuntimeError(f"pynput unavailable: {_PYNPUT_ERR}")
+        with self._lock:
+            self._release_stuck_modifiers()
+            self._kb.press(Key.backspace)
+            time.sleep(_KEY_SETTLE)
+            self._kb.release(Key.backspace)
 
     # ---- high-level flows ----
     def paste_text(self, text: str, restore: bool = False) -> bool:
@@ -109,24 +149,46 @@ class Clipboard:
             time.sleep(_CLIPBOARD_SETTLE)
             selected = self.get_text()
         finally:
-            # Restore the user's original clipboard contents.
-            try:
-                self.set_text(prior)
-            except Exception:
-                pass
+            # Restore the user's original clipboard contents. Clipboard writes
+            # can transiently fail under contention (another app/clipboard
+            # manager grabbing it right after our synthetic Ctrl+C), so retry
+            # rather than silently leaving the sentinel stuck on the clipboard.
+            for attempt in range(3):
+                try:
+                    self.set_text(prior)
+                    if self.get_text() == (prior or ""):
+                        break
+                except Exception:
+                    pass
+                time.sleep(_CLIPBOARD_SETTLE)
         return "" if selected == sentinel else selected
 
     def replace_selection(self, text: str) -> bool:
         """Replace the currently selected text by pasting over it."""
         return self.paste_text(text, restore=False)
 
+    def replace_selection_typed(self, text: str) -> bool:
+        """Replace the currently selected text by deleting it and typing the
+        replacement directly. Never touches the clipboard, so the user's
+        clipboard is left exactly as it was before Clarify ran."""
+        if not text:
+            return False
+        self.delete_selection()
+        time.sleep(_KEY_SETTLE)
+        self.type_text(text)
+        return True
+
     def paste_or_copy(self, text: str) -> str:
-        """Paste immediately; copy only if synthetic paste fails.
+        """Type directly into the focused window; copy only if typing fails.
 
         Chromium/Electron text boxes often do not expose a normal Win32 caret,
         so textbox detection is too fragile for dictation. Keep the transcript
         on the clipboard after Ctrl+V so a missed synthetic paste still has an
         immediate manual fallback.
+        Typing avoids the clipboard entirely so dictation never clobbers
+        whatever the user had copied. Falls back to leaving the text on the
+        clipboard only if synthetic typing itself raises (e.g. no keyboard
+        backend available).
         """
         if not text:
             return "empty"
@@ -134,8 +196,10 @@ class Clipboard:
         try:
             self.paste_text(text, restore=False)
             return "pasted" if had_text_target else "copied"
+            self.type_text(text)
+            return "pasted"
         except Exception as exc:  # noqa: BLE001
-            logutil.warn(f"paste failed; copying instead: {exc}")
+            logutil.warn(f"type failed; copying instead: {exc}")
             self.set_text(text)
             return "copied"
 

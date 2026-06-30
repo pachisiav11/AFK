@@ -463,6 +463,10 @@ class AFKApp:
 
         had_selection = bool(selection.strip())
         text = selection.strip() or self.clipboard.get_text().strip()
+        if text.startswith("__AFK_NO_SELECTION_") and text.endswith("__"):
+            # Leftover sentinel from a clipboard restore that failed; never
+            # treat it as real text.
+            text = ""
         if not text:
             emit_event("clarify_done", {"text": "", "model": "none", "empty": True})
             return
@@ -473,14 +477,17 @@ class AFKApp:
         out = result.get("text", "") or text
 
         if had_selection:
-            # Replace the highlighted text in place.
+            # Replace the highlighted text in place by deleting the
+            # selection and typing the replacement directly — never touches
+            # the clipboard, so the user's clipboard is untouched.
             try:
                 self.hotkeys.set_injecting(True)
-                self.clipboard.replace_selection(out)
+                self.clipboard.replace_selection_typed(out)
             finally:
                 self.hotkeys.set_injecting(False)
         else:
-            # No selection — just update the clipboard with the polished text.
+            # No selection — clarify whatever's currently on the clipboard
+            # and leave the clarified version there in its place.
             self.clipboard.set_text(out)
 
         emit_event(
