@@ -33,9 +33,11 @@ else:
 
 from .. import logutil
 
-# Small delays let the target app observe clipboard changes / key events.
-_CLIPBOARD_SETTLE = 0.015
-_KEY_SETTLE = 0.01
+# Delays let Electron/Chromium and sandboxed text boxes observe clipboard
+# changes before AFK restores or touches the clipboard again.
+_CLIPBOARD_SETTLE = 0.08
+_KEY_SETTLE = 0.02
+_PASTE_SETTLE = 0.25
 
 
 class Clipboard:
@@ -125,8 +127,8 @@ class Clipboard:
         self.set_text(text)
         time.sleep(_CLIPBOARD_SETTLE)
         self.paste()
+        time.sleep(_PASTE_SETTLE)
         if restore:
-            time.sleep(_CLIPBOARD_SETTLE)
             try:
                 self.set_text(prior or "")
             except Exception:
@@ -163,7 +165,7 @@ class Clipboard:
 
     def replace_selection(self, text: str) -> bool:
         """Replace the currently selected text by pasting over it."""
-        return self.paste_text(text, restore=True)
+        return self.paste_text(text, restore=False)
 
     def replace_selection_typed(self, text: str) -> bool:
         """Replace the currently selected text by deleting it and typing the
@@ -179,6 +181,10 @@ class Clipboard:
     def paste_or_copy(self, text: str) -> str:
         """Type directly into the focused window; copy only if typing fails.
 
+        Chromium/Electron text boxes often do not expose a normal Win32 caret,
+        so textbox detection is too fragile for dictation. Keep the transcript
+        on the clipboard after Ctrl+V so a missed synthetic paste still has an
+        immediate manual fallback.
         Typing avoids the clipboard entirely so dictation never clobbers
         whatever the user had copied. Falls back to leaving the text on the
         clipboard only if synthetic typing itself raises (e.g. no keyboard
@@ -186,7 +192,10 @@ class Clipboard:
         """
         if not text:
             return "empty"
+        had_text_target = active_text_target()
         try:
+            self.paste_text(text, restore=False)
+            return "pasted" if had_text_target else "copied"
             self.type_text(text)
             return "pasted"
         except Exception as exc:  # noqa: BLE001

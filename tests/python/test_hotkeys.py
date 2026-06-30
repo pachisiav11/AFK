@@ -19,6 +19,7 @@ SHIFT = keyboard.Key.shift
 SPACE = keyboard.Key.space
 C = keyboard.KeyCode(vk=67)  # 'C'
 K = keyboard.KeyCode(vk=75)  # 'K'
+L = keyboard.KeyCode(vk=76)  # 'L'
 
 
 class TestParse(unittest.TestCase):
@@ -45,6 +46,7 @@ class TestManager(unittest.TestCase):
                 "ptt_stop": lambda: self.events.append("ptt_stop"),
                 "toggle": lambda: self.events.append("toggle"),
                 "clarify": lambda: self.events.append("clarify"),
+                "learn_correction": lambda: self.events.append("learn_correction"),
                 "cancel": lambda: self.events.append("cancel"),
             }
         )
@@ -53,6 +55,7 @@ class TestManager(unittest.TestCase):
                 "push_to_talk": "ctrl+space",
                 "toggle": "ctrl+shift+space",
                 "clarify": "ctrl+alt+k",
+                "learn_correction": "ctrl+alt+l",
             }
         )
 
@@ -93,6 +96,12 @@ class TestManager(unittest.TestCase):
         self.mgr._on_press(keyboard.Key.alt_l)
         self.mgr._on_press(K)
         self.assertEqual(self.events, ["clarify"])
+
+    def test_learn_correction(self):
+        self.mgr._on_press(CTRL)
+        self.mgr._on_press(keyboard.Key.alt_l)
+        self.mgr._on_press(L)
+        self.assertEqual(self.events, ["learn_correction"])
 
     def test_injecting_suppresses_events(self):
         self.mgr.set_injecting(True)

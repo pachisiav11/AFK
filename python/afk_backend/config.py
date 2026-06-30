@@ -103,6 +103,14 @@ def stats_path() -> Path:
     return data_dir() / "statistics.json"
 
 
+def adaptation_path() -> Path:
+    return data_dir() / "adaptation.json"
+
+
+def history_path() -> Path:
+    return data_dir() / "transcriptions.json"
+
+
 # ---- Model identifiers (used from Phase 2/4 onward) ----
 PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 GEMMA_SHORT_MODEL = "gemma-3-270m-it"
@@ -110,8 +118,8 @@ GEMMA_LONG_MODEL = "gemma-4-e2b-it"
 
 # Default word-count threshold for short vs. long clarification model.
 # The 270M model is fast but too small for sentence-level grammar cleanup, so
-# route normal dictation/Clarify requests to Gemma 4 by default.
-DEFAULT_WORD_THRESHOLD = 4
+# route only long-form text to Gemma 4 by default.
+DEFAULT_WORD_THRESHOLD = 100
 
 # Clarify model GGUF filenames + their Hugging Face source repos.
 CLARIFY_SHORT_GGUF = "gemma-3-270m-Q8_0.gguf"
