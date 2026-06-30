@@ -21,7 +21,8 @@
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "rcedit": "^5.0.2"
   },
   "dependencies": {
     "auto-launch": "^5.0.6"
@@ -77,6 +78,9 @@
       "icon": "assets/icon.ico"
     },
     "nsis": {
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
       "oneClick": true,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
@@ -84,6 +88,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "AFK",
       "useZip": true
-    }
+    },
+    "afterPack": "scripts/stamp-windows-icon.js"
   }
 }
