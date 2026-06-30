@@ -124,6 +124,7 @@ class TestManager(unittest.TestCase):
         self.assertEqual(self.events.count("cancel"), 2)
 
     def test_escape_cancels_regardless_of_held_modifiers(self):
+        # e.g. user is mid-push-to-talk (holding Ctrl+Space) and hits Escape.
         self.mgr._on_press(CTRL)
         self.mgr._on_press(SPACE)
         self.mgr._on_press(keyboard.Key.esc)

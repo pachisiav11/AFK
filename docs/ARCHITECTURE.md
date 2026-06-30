@@ -36,16 +36,19 @@ over Electron IPC, which forwards to Python. Three hops, one whitelist.
 ## Method table
 
 The backend exposes an explicit, auditable method table (see
-`afk_backend/app.py`). Phase 1 methods:
+`afk_backend/app.py`):
 
 - `ping` → `{pong: true}`
 - `get_info` → version, python, platform, model status, paths
 - `get_settings` → full settings object
 - `update_settings` → merge a patch, persist, emit `settings_updated`
 - `list_methods` → introspection
-
-Later phases register `transcribe`, `clarify`, `start_recording`,
-`stop_recording`, `get_statistics`, `list_microphones`, etc.
+- `start_recording` / `stop_recording` → push-to-talk / toggle control
+- `transcribe` → run Parakeet STT on captured audio, emit result
+- `clarify` → run Gemma grammar-correction on selected text, replace in place
+- `cancel` → abort an in-flight recording, transcription, or clarify without pasting
+- `get_statistics` → local usage metrics
+- `list_microphones` → enumerate available audio input devices
 
 ## Settings & data
 

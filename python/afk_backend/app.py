@@ -411,6 +411,22 @@ class AFKApp:
         else:
             threading.Thread(target=self._start_rec_safe, daemon=True).start()
 
+    def _hk_cancel(self) -> None:
+        """Escape: abort whatever's in progress (dictation or Clarify)
+        without transcribing/pasting/replacing anything."""
+        self._abort_event.set()
+        if self.recorder.is_recording:
+            threading.Thread(target=self._cancel_recording, daemon=True).start()
+        else:
+            emit_event("cancelled", {})
+
+    def _cancel_recording(self) -> None:
+        try:
+            self.recorder.stop()  # discard captured audio
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"cancel recording failed: {exc}")
+        emit_event("cancelled", {"source": "dictation"})
+
     def _hk_clarify(self) -> None:
         threading.Thread(target=self._clarify_flow, daemon=True).start()
 
