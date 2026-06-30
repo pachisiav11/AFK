@@ -559,7 +559,8 @@ class AFKApp:
         output = (params.get("output") or spoken).strip()
         if not spoken or not output:
             raise RpcError("start_training_sample requires 'spoken' and 'output'")
-        self._train_pending = {"kind": kind, "spoken": spoken, "output": output}
+        trigger_type = params.get("trigger_type") if params.get("trigger_type") in {"autoreplace", "autofill"} else "autoreplace"
+        self._train_pending = {"kind": kind, "spoken": spoken, "output": output, "trigger_type": trigger_type}
         return self.start_recording(params)
 
     def _finish_training_sample(self, _params: Dict[str, Any]) -> Dict[str, Any]:
@@ -574,6 +575,7 @@ class AFKApp:
             pending.get("spoken", ""),
             pending.get("output", ""),
             heard,
+            pending.get("trigger_type", "autoreplace"),
         )
         out = {**result, "training": learned}
         emit_event("adaptation_updated", self.adaptation.snapshot())
@@ -633,10 +635,47 @@ def _format_transcript_text(text: str, *, capitalization: bool = True, punctuati
     out = re.sub(r"\s+", " ", text or "").strip()
     if not out:
         return ""
-    if not punctuation:
+    if punctuation:
+        out = _apply_spoken_punctuation(out)
+    else:
         out = re.sub(r"[.,!?;:]+", "", out)
     if not capitalization:
         return out.lower()
     if out:
         out = out[:1].upper() + out[1:]
     return out
+
+
+_SPOKEN_PUNCTUATION = (
+    ("exclamation point", "!"),
+    ("exclamation mark", "!"),
+    ("question mark", "?"),
+    ("comma", ","),
+    ("period", "."),
+    ("full stop", "."),
+    ("colon", ":"),
+    ("semicolon", ";"),
+    ("semi colon", ";"),
+    ("dash", "-"),
+    ("hyphen", "-"),
+    ("new paragraph", "\n\n"),
+    ("new line", "\n"),
+    ("newline", "\n"),
+)
+
+
+def _apply_spoken_punctuation(text: str) -> str:
+    out = text
+    for phrase, mark in _SPOKEN_PUNCTUATION:
+        if mark.startswith("\n"):
+            out = re.sub(rf"\s*\b{re.escape(phrase)}\b\s*", mark, out, flags=re.IGNORECASE)
+        else:
+            out = re.sub(rf"\s+\b{re.escape(phrase)}\b", mark, out, flags=re.IGNORECASE)
+            out = re.sub(rf"\b{re.escape(phrase)}\b", mark, out, flags=re.IGNORECASE)
+    out = re.sub(r"\s+([,.;:!?])", r"\1", out)
+    out = re.sub(r"([,;:!?])(?=\S)", r"\1 ", out)
+    out = re.sub(r"\.(?=\S)", ". ", out)
+    out = re.sub(r"\s+-\s+", " - ", out)
+    out = re.sub(r"[ \t]+\n", "\n", out)
+    out = re.sub(r"\n[ \t]+", "\n", out)
+    return out.strip()

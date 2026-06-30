@@ -79,6 +79,23 @@ class TestAdaptationStore(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(text, "paradoxical_duck")
 
+    def test_trigger_autofill_keeps_spoken_phrase_and_exact_output(self):
+        from afk_backend.adaptation import AdaptationStore
+
+        store = AdaptationStore()
+        res = store.record_training(
+            kind="trigger",
+            spoken="my email is",
+            output="sohumarora28@gmail.com",
+            heard="my email is",
+            trigger_type="autofill",
+        )
+        self.assertTrue(res["ok"])
+
+        text, changed, _applied = store.apply("My Email Is")
+        self.assertTrue(changed)
+        self.assertEqual(text, "my email is sohumarora28@gmail.com")
+
     def test_delete_training_removes_saved_sample_and_correction(self):
         from afk_backend.adaptation import AdaptationStore
 

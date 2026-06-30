@@ -16,6 +16,19 @@ const DEFAULT_HOTKEYS = {
   learn_correction: 'Ctrl+Alt+L'
 };
 
+const HOTKEY_OPTIONS = [
+  'Ctrl+Shift+Space',
+  'Ctrl+Alt+Space',
+  'Ctrl+Alt+K',
+  'Ctrl+Shift+K',
+  'Ctrl+Alt+L',
+  'Ctrl+Shift+L',
+  'Ctrl+Alt+D',
+  'Ctrl+Shift+D',
+  'Ctrl+Alt+J',
+  'Ctrl+Shift+J'
+];
+
 function escapeHtml(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -29,6 +42,117 @@ function setText(sel, value) {
   const el = $(sel);
   if (el) el.textContent = value;
 }
+
+function selectedOptionLabel(select) {
+  const option = select.options[select.selectedIndex];
+  return option ? option.textContent : '';
+}
+
+function syncSelectControl(select) {
+  const shell = select.closest('.select-shell');
+  if (!shell) return;
+  const button = shell.querySelector('.select-button');
+  const menu = shell.querySelector('.select-menu');
+  if (button) button.querySelector('span').textContent = selectedOptionLabel(select);
+  if (!menu) return;
+  Array.from(menu.children).forEach((item) => {
+    const active = item.dataset.value === select.value;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+}
+
+function closeSelects(exceptShell) {
+  $$('.select-shell.open').forEach((shell) => {
+    if (shell === exceptShell) return;
+    shell.classList.remove('open');
+    const button = shell.querySelector('.select-button');
+    if (button) button.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function rebuildSelectMenu(select) {
+  const shell = select.closest('.select-shell');
+  if (!shell) return;
+  const menu = shell.querySelector('.select-menu');
+  if (!menu) return;
+  menu.innerHTML = Array.from(select.options).map((option) =>
+    `<button type="button" class="select-option" role="option" data-value="${escapeHtml(option.value)}">${escapeHtml(option.textContent)}</button>`
+  ).join('');
+  syncSelectControl(select);
+}
+
+function enhanceSelect(select) {
+  if (!select || select.dataset.enhanced === 'true') {
+    if (select) rebuildSelectMenu(select);
+    return;
+  }
+  select.dataset.enhanced = 'true';
+  select.classList.add('native-select');
+  const shell = document.createElement('div');
+  shell.className = 'select-shell';
+  select.parentNode.insertBefore(shell, select);
+  shell.appendChild(select);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'select-button';
+  button.setAttribute('aria-haspopup', 'listbox');
+  button.setAttribute('aria-expanded', 'false');
+  button.innerHTML = `<span>${escapeHtml(selectedOptionLabel(select))}</span><i aria-hidden="true"></i>`;
+  const menu = document.createElement('div');
+  menu.className = 'select-menu';
+  menu.setAttribute('role', 'listbox');
+  shell.appendChild(button);
+  shell.appendChild(menu);
+  rebuildSelectMenu(select);
+
+  button.addEventListener('click', () => {
+    const open = !shell.classList.contains('open');
+    closeSelects(shell);
+    shell.classList.toggle('open', open);
+    button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  button.addEventListener('keydown', (event) => {
+    if (!['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Escape'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Escape') {
+      closeSelects();
+      return;
+    }
+    if (!shell.classList.contains('open')) {
+      shell.classList.add('open');
+      button.setAttribute('aria-expanded', 'true');
+      return;
+    }
+    const options = Array.from(select.options);
+    const dir = event.key === 'ArrowUp' ? -1 : 1;
+    const next = Math.max(0, Math.min(options.length - 1, select.selectedIndex + dir));
+    select.value = options[next].value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    syncSelectControl(select);
+  });
+
+  menu.addEventListener('click', (event) => {
+    const item = event.target.closest('.select-option');
+    if (!item) return;
+    select.value = item.dataset.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    closeSelects();
+    syncSelectControl(select);
+    button.focus();
+  });
+
+  select.addEventListener('change', () => syncSelectControl(select));
+}
+
+function enhanceSelects(root = document) {
+  root.querySelectorAll('select').forEach(enhanceSelect);
+}
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.select-shell')) closeSelects();
+});
 
 // ---------- Navigation ----------
 function initNav() {
@@ -104,6 +228,7 @@ async function refreshMicrophones() {
     const cfg = await window.afk.call('get_settings', {});
     _settingsCache = cfg;
     sel.value = cfg.microphone || current || '';
+    enhanceSelect(sel);
   } catch (e) {
     // Backend may still be booting.
   }
@@ -538,9 +663,10 @@ async function refreshStatistics() {
 // ---------- Train ----------
 function trainingItem(item) {
   const kind = item.kind === 'trigger' ? 'Trigger' : 'Word';
+  const mode = item.kind === 'trigger' && item.trigger_type === 'autofill' ? 'Autofill' : 'Autoreplace';
   const heard = item.heard ? `Parakeet heard: ${item.heard}` : 'No audio sample captured';
   return `<div class="training-item">
-    <div><strong>${escapeHtml(kind)}</strong><span>${escapeHtml(item.spoken || '')}</span></div>
+    <div><strong>${escapeHtml(kind)}</strong><span>${escapeHtml(item.spoken || '')}</span>${item.kind === 'trigger' ? `<small>${escapeHtml(mode)}</small>` : ''}</div>
     <div><b>${escapeHtml(item.output || '')}</b><small>${escapeHtml(heard)}</small></div>
     <button class="icon-btn danger" data-delete-training="${escapeHtml(item.id || '')}" aria-label="Delete training sample">Delete</button>
   </div>`;
@@ -576,6 +702,7 @@ async function startTrainSample(kind) {
       kind,
       spoken,
       output,
+      trigger_type: isTrigger ? ($('#trainTriggerType').value || 'autofill') : 'autoreplace',
       device: $('#micSelect') ? ($('#micSelect').value || null) : null
     });
   } catch (e) {
@@ -635,6 +762,13 @@ function toggleHtml(id, checked) {
   return `<label class="switch" aria-label="${escapeHtml(id)}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="slider"></span></label>`;
 }
 
+function optionsHtml(options, selected) {
+  const all = options.includes(selected) || !selected ? options : [selected].concat(options);
+  return all.map((value) =>
+    `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(value)}</option>`
+  ).join('');
+}
+
 async function refreshSettings() {
   const list = $('#settingsList');
   try {
@@ -659,15 +793,16 @@ async function refreshSettings() {
       settingRow('Punctuation', 'Keep punctuation from speech recognition', toggleHtml('set-auto_punctuation', cfg.auto_punctuation !== false)) +
       settingRow('Training corrections', 'Apply words and triggers from the Train tab', toggleHtml('set-training_corrections', cfg.training_corrections !== false)) +
       settingRow('Word-count threshold', 'Use the long model above this number of words', `<input type="number" id="set-word_count_threshold" min="1" max="500" value="${escapeHtml(cfg.word_count_threshold)}">`) +
-      settingRow('Push-to-talk hotkey', 'Hold to record', `<input type="text" class="hotkey-input" id="hk-push_to_talk" value="${escapeHtml(hk.push_to_talk || '')}" spellcheck="false">`) +
-      settingRow('Toggle hotkey', 'Press once to start or stop', `<input type="text" class="hotkey-input" id="hk-toggle" value="${escapeHtml(hk.toggle || '')}" spellcheck="false">`) +
-      settingRow('Clarify hotkey', 'Polish selected text or clipboard', `<input type="text" class="hotkey-input" id="hk-clarify" value="${escapeHtml(hk.clarify || '')}" spellcheck="false">`) +
-      settingRow('Learn correction hotkey', 'Select corrected text after dictation', `<input type="text" class="hotkey-input" id="hk-learn_correction" value="${escapeHtml(hk.learn_correction || '')}" spellcheck="false">`) +
+      settingRow('Push-to-talk hotkey', 'Hold to record', `<select id="hk-push_to_talk">${optionsHtml(HOTKEY_OPTIONS, hk.push_to_talk || DEFAULT_HOTKEYS.push_to_talk)}</select>`) +
+      settingRow('Toggle hotkey', 'Press once to start or stop', `<select id="hk-toggle">${optionsHtml(HOTKEY_OPTIONS, hk.toggle || DEFAULT_HOTKEYS.toggle)}</select>`) +
+      settingRow('Clarify hotkey', 'Polish selected text or clipboard', `<select id="hk-clarify">${optionsHtml(HOTKEY_OPTIONS, hk.clarify || DEFAULT_HOTKEYS.clarify)}</select>`) +
+      settingRow('Learn correction hotkey', 'Select corrected text after dictation', `<select id="hk-learn_correction">${optionsHtml(HOTKEY_OPTIONS, hk.learn_correction || DEFAULT_HOTKEYS.learn_correction)}</select>`) +
       settingRow('Logging', 'Write diagnostic logs to disk', toggleHtml('set-logging', cfg.logging)) +
       settingRow('Developer mode', 'Enable extra diagnostics', toggleHtml('set-developer_mode', cfg.developer_mode)) +
       `<div class="settings-actions"><button class="btn" id="resetStatsBtn">Reset statistics</button></div>`;
 
     wireSettingControls();
+    enhanceSelects(list);
   } catch (e) {
     list.innerHTML = '<div class="empty-hint">Settings unavailable while the backend starts.</div>';
   }
@@ -855,6 +990,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   initEvents();
   initEditableHotkeyHandling();
   initTrainControls();
+  enhanceSelects();
   if ($('#recordBtn')) $('#recordBtn').addEventListener('click', toggleRecord);
   if ($('#loadAsrBtn')) $('#loadAsrBtn').addEventListener('click', loadAsrModel);
   if ($('#micSelect')) $('#micSelect').addEventListener('change', onMicChange);

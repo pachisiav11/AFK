@@ -72,7 +72,8 @@ class AdaptationStore:
             pattern = re.compile(rf"(?<!\w){re.escape(heard)}(?!\w)", re.IGNORECASE)
 
             def repl(match: re.Match[str]) -> str:
-                replacement = intended if item.get("source") == "train_trigger" else _match_case(match.group(0), intended)
+                source = item.get("source", "")
+                replacement = intended if source.startswith("train_trigger") else _match_case(match.group(0), intended)
                 applied.append({"heard": match.group(0), "intended": replacement})
                 return replacement
 
@@ -128,15 +129,29 @@ class AdaptationStore:
             self._save()
         return {"ok": True, "expected": expected, "heard": heard, "learn_result": result}
 
-    def record_training(self, kind: str, spoken: str, output: str, heard: str) -> Dict[str, Any]:
+    def record_training(
+        self,
+        kind: str,
+        spoken: str,
+        output: str,
+        heard: str,
+        trigger_type: str = "autoreplace",
+    ) -> Dict[str, Any]:
         kind = kind if kind in {"word", "trigger"} else "word"
+        trigger_type = trigger_type if trigger_type in {"autoreplace", "autofill"} else "autoreplace"
         spoken = _clean_text(spoken)
         output = _clean_text(output)
         heard = _clean_text(heard)
         if not spoken or not output:
             return {"ok": False, "reason": "missing_training_text"}
 
-        learn_result = self.learn_correction(heard, output, source=f"train_{kind}") if heard else {
+        intended = output
+        source = f"train_{kind}"
+        if kind == "trigger":
+            intended = _clean_text(f"{spoken} {output}") if trigger_type == "autofill" else output
+            source = f"train_trigger_{trigger_type}"
+
+        learn_result = self.learn_correction(heard, intended, source=source) if heard else {
             "ok": False,
             "reason": "missing_heard",
         }
@@ -146,6 +161,7 @@ class AdaptationStore:
                 "kind": kind,
                 "spoken": spoken,
                 "output": output,
+                "trigger_type": trigger_type if kind == "trigger" else "",
                 "heard": heard,
                 "created_at": _now(),
                 "learned": bool(learn_result.get("ok")),
@@ -159,6 +175,7 @@ class AdaptationStore:
             "kind": kind,
             "spoken": spoken,
             "output": output,
+            "trigger_type": item["trigger_type"],
             "heard": heard,
             "learn_result": learn_result,
         }
@@ -181,15 +198,22 @@ class AdaptationStore:
                 found = True
 
                 kind = match.get("kind", "word")
-                source = f"train_{kind}"
+                trigger_type = match.get("trigger_type") or "autoreplace"
+                sources = {f"train_{kind}"}
+                if kind == "trigger":
+                    sources.update({"train_trigger_autoreplace", "train_trigger_autofill"})
+                source = f"train_trigger_{trigger_type}" if kind == "trigger" else f"train_{kind}"
                 heard_key = _norm(match.get("heard", ""))
                 spoken_key = _norm(match.get("spoken", ""))
-                output_key = _norm(match.get("output", ""))
+                output = match.get("output", "")
+                output_key = _norm(
+                    _clean_text(f"{match.get('spoken', '')} {output}") if trigger_type == "autofill" else output
+                )
                 self._data["training"] = remaining
                 self._data["corrections"] = [
                     c for c in self._data.get("corrections", [])
                     if not (
-                        c.get("source") == source
+                        c.get("source", source) in sources
                         and _norm(c.get("intended", "")) == output_key
                         and _norm(c.get("heard", "")) in {heard_key, spoken_key}
                     )

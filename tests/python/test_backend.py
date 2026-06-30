@@ -64,6 +64,14 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual(_format_transcript_text("hello there.", capitalization=True, punctuation=True), "Hello there.")
         self.assertEqual(_format_transcript_text("Hello there.", capitalization=False, punctuation=True), "hello there.")
         self.assertEqual(_format_transcript_text("Hello, there!", capitalization=True, punctuation=False), "Hello there")
+        self.assertEqual(
+            _format_transcript_text("hello comma there exclamation point", capitalization=True, punctuation=True),
+            "Hello, there!",
+        )
+        self.assertEqual(
+            _format_transcript_text("first line new line second line", capitalization=True, punctuation=True),
+            "First line\nsecond line",
+        )
 
     def test_unknown_method(self):
         from afk_backend.rpc import RpcError
