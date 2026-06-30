@@ -10,13 +10,14 @@ let _settingsCache = null;
 let activeTrainingKind = null;
 
 const DEFAULT_HOTKEYS = {
-  push_to_talk: 'Ctrl+Shift+Space',
-  toggle: 'Ctrl+Alt+Space',
+  push_to_talk: 'Ctrl+Space',
+  toggle: 'Ctrl+Shift+Space',
   clarify: 'Ctrl+Alt+K',
   learn_correction: 'Ctrl+Alt+L'
 };
 
 const HOTKEY_OPTIONS = [
+  'Ctrl+Space',
   'Ctrl+Shift+Space',
   'Ctrl+Alt+Space',
   'Ctrl+Alt+K',

@@ -51,7 +51,7 @@ class TestDispatch(unittest.TestCase):
             "update_settings", {"patch": {"hotkeys": {"clarify": "Ctrl+Alt+C"}}}
         )
         self.assertEqual(updated2["hotkeys"]["clarify"], "Ctrl+Alt+C")
-        self.assertEqual(updated2["hotkeys"]["push_to_talk"], "Ctrl+Shift+Space")
+        self.assertEqual(updated2["hotkeys"]["push_to_talk"], "Ctrl+Space")
 
     def test_training_methods_registered(self):
         methods = self.app.dispatch("list_methods", {})

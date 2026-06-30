@@ -45,8 +45,13 @@ class AFKApp:
                 "toggle": self._hk_toggle,
                 "clarify": self._hk_clarify,
                 "learn_correction": self._hk_learn_correction,
+                "cancel": self._hk_cancel,
             }
         )
+        # Set whenever Escape is pressed; cleared at the start of each new
+        # dictation/Clarify run. Checked at safe points so an in-flight command
+        # stops short of pasting or replacing anything.
+        self._abort_event = threading.Event()
 
         # Phase 4 service.
         self.clarifier = ClarifyEngine()
@@ -176,6 +181,7 @@ class AFKApp:
             raise RpcError(f"ASR load failed: {exc}")
 
     def start_recording(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        self._abort_event.clear()
         device = params.get("device", self.settings.get("microphone"))
         self.recorder.start(device=device)
         emit_event("recording_started", {"device": device})
@@ -347,6 +353,7 @@ class AFKApp:
             self.hotkeys.set_injecting(False)
 
     def _start_rec_safe(self) -> None:
+        self._abort_event.clear()
         try:
             if not self.recorder.is_recording:
                 self.start_recording({})
@@ -363,7 +370,7 @@ class AFKApp:
 
     def _clarify_and_insert(self, result: Dict[str, Any]) -> Dict[str, Any]:
         text = (result or {}).get("text", "")
-        if not text:
+        if not text or self._abort_event.is_set():
             return result or {}
         # Optionally polish the dictation with Clarify before pasting.
         if self.settings.get("auto_clarify", False) and self.clarifier.any_available():
@@ -371,12 +378,18 @@ class AFKApp:
             emit_event("clarify_started", {"source": "dictation"})
             cr = self.clarifier.clarify(text, threshold=threshold)
             self._record_clarify(cr)
+            if self._abort_event.is_set():
+                emit_event("cancelled", {"source": "dictation"})
+                return result or {}
             polished = cr.get("text")
             if polished:
                 text = polished
                 emit_event("transcription", {"text": text, "clarified": True})
                 result["text"] = text
                 result["clarified"] = True
+        if self._abort_event.is_set():
+            emit_event("cancelled", {"source": "dictation"})
+            return result or {}
         if self.settings.get("auto_paste", True):
             before = text
             result["action"] = self._paste(before)
@@ -400,6 +413,21 @@ class AFKApp:
 
     def _hk_clarify(self) -> None:
         threading.Thread(target=self._clarify_flow, daemon=True).start()
+
+    def _hk_cancel(self) -> None:
+        """Escape: abort dictation or Clarify without inserting anything."""
+        self._abort_event.set()
+        if self.recorder.is_recording:
+            threading.Thread(target=self._cancel_recording, daemon=True).start()
+        else:
+            emit_event("cancelled", {})
+
+    def _cancel_recording(self) -> None:
+        try:
+            self.recorder.stop()  # discard captured audio
+        except Exception as exc:  # noqa: BLE001
+            logutil.error(f"cancel recording failed: {exc}")
+        emit_event("cancelled", {"source": "dictation"})
 
     def _hk_learn_correction(self) -> None:
         threading.Thread(target=self._learn_correction_flow, daemon=True).start()
@@ -452,6 +480,7 @@ class AFKApp:
             emit_event("clarify_unavailable", {"reason": "No Clarify model installed"})
             return
 
+        self._abort_event.clear()
         emit_event("clarify_started", {"source": "hotkey"})
 
         # Capture selection with the listener suppressed (we synthesize Ctrl+C).
@@ -474,6 +503,9 @@ class AFKApp:
         threshold = self.settings.get("word_count_threshold", config.DEFAULT_WORD_THRESHOLD)
         result = self.clarifier.clarify(text, threshold=threshold)
         self._record_clarify(result)
+        if self._abort_event.is_set():
+            emit_event("cancelled", {"source": "clarify"})
+            return
         out = result.get("text", "") or text
 
         if had_selection:

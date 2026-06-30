@@ -47,12 +47,13 @@ class TestManager(unittest.TestCase):
                 "toggle": lambda: self.events.append("toggle"),
                 "clarify": lambda: self.events.append("clarify"),
                 "learn_correction": lambda: self.events.append("learn_correction"),
+                "cancel": lambda: self.events.append("cancel"),
             }
         )
         self.mgr.set_bindings(
             {
-                "push_to_talk": "ctrl+shift+space",
-                "toggle": "ctrl+alt+space",
+                "push_to_talk": "ctrl+space",
+                "toggle": "ctrl+shift+space",
                 "clarify": "ctrl+alt+k",
                 "learn_correction": "ctrl+alt+l",
             }
@@ -60,35 +61,32 @@ class TestManager(unittest.TestCase):
 
     def test_push_to_talk_hold(self):
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, ["ptt_start"])
         self.mgr._on_release(SPACE)
         self.assertEqual(self.events, ["ptt_start", "ptt_stop"])
-        self.mgr._on_release(SHIFT)
         self.mgr._on_release(CTRL)
 
     def test_ptt_stops_when_modifier_released_first(self):
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.mgr._on_release(CTRL)  # release ctrl while still holding space
         self.assertEqual(self.events, ["ptt_start", "ptt_stop"])
 
     def test_toggle_not_confused_with_ptt(self):
-        # Ctrl+Alt+Space must fire toggle, NOT push-to-talk.
+        # Ctrl+Shift+Space must fire toggle, NOT push-to-talk.
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(keyboard.Key.alt_l)
+        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, ["toggle"])
         self.assertNotIn("ptt_start", self.events)
         self.mgr._on_release(SPACE)
-        self.mgr._on_release(keyboard.Key.alt_l)
+        self.mgr._on_release(SHIFT)
         self.mgr._on_release(CTRL)
 
     def test_toggle_fires_once_per_press(self):
         self.mgr._on_press(CTRL)
-        self.mgr._on_press(keyboard.Key.alt_l)
+        self.mgr._on_press(SHIFT)
         self.mgr._on_press(SPACE)
         self.mgr._on_press(SPACE)  # auto-repeat shouldn't re-fire
         self.assertEqual(self.events.count("toggle"), 1)
@@ -111,6 +109,27 @@ class TestManager(unittest.TestCase):
         self.mgr._on_press(SPACE)
         self.assertEqual(self.events, [])
         self.mgr.set_injecting(False)
+
+    def test_escape_fires_cancel(self):
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertEqual(self.events, ["cancel"])
+        self.mgr._on_release(keyboard.Key.esc)
+
+    def test_escape_fires_once_per_press(self):
+        self.mgr._on_press(keyboard.Key.esc)
+        self.mgr._on_press(keyboard.Key.esc)  # auto-repeat shouldn't re-fire
+        self.assertEqual(self.events.count("cancel"), 1)
+        self.mgr._on_release(keyboard.Key.esc)
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertEqual(self.events.count("cancel"), 2)
+
+    def test_escape_cancels_regardless_of_held_modifiers(self):
+        self.mgr._on_press(CTRL)
+        self.mgr._on_press(SPACE)
+        self.mgr._on_press(keyboard.Key.esc)
+        self.assertIn("cancel", self.events)
+        self.assertNotIn("clarify", self.events)
+        self.assertNotIn("toggle", self.events)
 
 
 if __name__ == "__main__":

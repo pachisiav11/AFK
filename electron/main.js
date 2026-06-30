@@ -270,6 +270,9 @@ function startBackend() {
     } else if (event === 'clarify_done') {
       setOverlayState('done', { label: 'Corrected' });
       hideOverlaySoon(1200);
+    } else if (event === 'cancelled') {
+      setOverlayState('done', { label: 'Cancelled' });
+      hideOverlaySoon(900);
     }
   });
 
