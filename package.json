@@ -1,7 +1,7 @@
 {
   "name": "afk",
   "productName": "AFK",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AFK - privacy-first, fully-local AI speech-to-text for Windows.",
   "author": {
     "name": "pachisiav11"
@@ -81,13 +81,13 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico",
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "AFK",
-      "useZip": true
+      "useZip": false
     },
     "afterPack": "scripts/stamp-windows-icon.js"
   }

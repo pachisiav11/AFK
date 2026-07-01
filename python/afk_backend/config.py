@@ -38,16 +38,32 @@ def local_asr_dir() -> Path:
 
     Search order:
       1. $AFK_ASR_DIR (explicit override)
-      2. <repo>/models/parakeet-v3   (handy for development)
-      3. <models_dir>/parakeet-v3    (alongside other app models)
+      2. <installed resources>/models/parakeet-v3
+      3. <repo>/models/parakeet-v3   (handy for development)
+      4. <models_dir>/parakeet-v3    (alongside other app models)
+      5. Hugging Face cache snapshot from the official ONNX repo
     """
     env = os.environ.get("AFK_ASR_DIR")
     if env:
         return Path(env)
-    repo_local = Path(__file__).resolve().parents[2] / "models" / "parakeet-v3"
-    if repo_local.exists():
-        return repo_local
+    for candidate in _local_asr_candidates():
+        if _has_required_asr_files(candidate):
+            return candidate
     return models_dir() / "parakeet-v3"
+
+
+def _local_asr_candidates() -> tuple[Path, ...]:
+    root = Path(__file__).resolve().parents[2]
+    model_root = models_dir()
+    return (
+        root / "models" / "parakeet-v3",
+        model_root / "parakeet-v3",
+        model_root
+        / "hub"
+        / "models--istupakov--parakeet-tdt-0.6b-v3-onnx"
+        / "snapshots"
+        / "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+    )
 
 
 # Files onnx-asr needs for the int8 Parakeet model loaded from a local path.
@@ -57,6 +73,11 @@ LOCAL_ASR_REQUIRED = (
     "vocab.txt",
     "config.json",
 )
+
+
+def _has_required_asr_files(path: Path) -> bool:
+    return path.exists() and all((path / name).exists() for name in LOCAL_ASR_REQUIRED)
+
 
 # Official NVIDIA NeMo checkpoint filename.
 NEMO_CHECKPOINT = "parakeet-tdt-0.6b-v3.nemo"

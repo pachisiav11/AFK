@@ -181,10 +181,6 @@ class Clipboard:
     def paste_or_copy(self, text: str) -> str:
         """Type directly into the focused window; copy only if typing fails.
 
-        Chromium/Electron text boxes often do not expose a normal Win32 caret,
-        so textbox detection is too fragile for dictation. Keep the transcript
-        on the clipboard after Ctrl+V so a missed synthetic paste still has an
-        immediate manual fallback.
         Typing avoids the clipboard entirely so dictation never clobbers
         whatever the user had copied. Falls back to leaving the text on the
         clipboard only if synthetic typing itself raises (e.g. no keyboard
@@ -192,10 +188,7 @@ class Clipboard:
         """
         if not text:
             return "empty"
-        had_text_target = active_text_target()
         try:
-            self.paste_text(text, restore=False)
-            return "pasted" if had_text_target else "copied"
             self.type_text(text)
             return "pasted"
         except Exception as exc:  # noqa: BLE001
